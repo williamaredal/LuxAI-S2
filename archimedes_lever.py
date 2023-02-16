@@ -4,39 +4,6 @@ import numpy as np
 import math
 
 
-
-# Create excel spreadsheets to look at strategies for when to start producing lichen to find weather its more optimal to
-#      continually grow lichen, or to hoard water until a certain turn (depending on water gathered?) and mass produce lichen then
-# [X] Made graphs and have found good enough growth estimates with tables for further estimation if necessary.
-
-# TODO Update files in repo, or move agent files to new repo. Basically move from beta to season 2.
-# [X]
-
-# TODO Clean up structure of notebook cells and segments of the algorithm to make it easier to find where what desicion is being made
-# []
-
-# TODO Move functions used by algorithm to separate file?
-# []
-
-# TODO Make the agent place a factory right next to one ice tile
-# []
-
-# TODO Make the agent update its possible placing locations by removing coordinates around placed (friendly and foe) factory tiles
-# []
-
-# TODO Update placement of factories so that they place only right next to ice tiles, with no/low rubble
-#      This can be acchieved through the "board.rubble" property
-# []
-
-# TODO Update the assignments to have n heavy bots on ice gathering just outside the factory, and some light for ore collection
-# []
-
-# TODO Fix ordering system so that heavies are assigned to ice tiles right by the factory for instant dropof and charging,
-#      and so that the bots are ordered to correct coordinates,
-#      and so that the return to factory scheduling works.
-# []
-
-
 # functions used by agent
 def neighbors(x, y):
     return np.array([
