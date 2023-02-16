@@ -12,6 +12,12 @@ import math
 # TODO Update files in repo, or move agent files to new repo. Basically move from beta to season 2.
 # [X]
 
+# TODO Clean up structure of notebook cells and segments of the algorithm to make it easier to find where what desicion is being made
+# []
+
+# TODO Move functions used by algorithm to separate file?
+# []
+
 # TODO Make the agent place a factory right next to one ice tile
 # []
 
