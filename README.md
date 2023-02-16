@@ -1,1 +1,2 @@
-# LuxAI-S2
+# My LuxAI-S2 Algorithm Submission
+
