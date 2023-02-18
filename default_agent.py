@@ -3,7 +3,7 @@ from lux.utils import my_turn_to_place_factory
 import numpy as np
 
 # defines the agent class
-class Agent_Default():
+class Default_Agent():
     def __init__(self, player: str, env_cfg: EnvConfig) -> None:
         self.player = player
         self.opp_player = "player_1" if self.player == "player_0" else "player_0"
@@ -54,5 +54,5 @@ def early_setup(self, step: int, obs, remainingOverageTime: int = 60):
         return dict()
 
 
-Agent_Default.early_setup = early_setup
+Default_Agent.early_setup = early_setup
 
