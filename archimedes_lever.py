@@ -1,18 +1,11 @@
-from lux.kit import obs_to_game_state, GameState, EnvConfig
-from lux.utils import direction_to, my_turn_to_place_factory
-import numpy as np
-import math
-
-from luxai2022.env import LuxAI2022
+from luxai_s2.env import LuxAI_S2
 from lux.kit import obs_to_game_state, GameState, EnvConfig
 from lux.utils import my_turn_to_place_factory, direction_to 
-import matplotlib.pyplot as plt
 import numpy as np
 import plotly.express as px
 import math
-import cv2
 
-env = LuxAI2022() # create the environment object
+env = LuxAI_S2() # create the environment object
 obs = env.reset(seed=69) # resets an environment with a seed
 
 # the observation is always composed of observations for both players.
@@ -40,7 +33,7 @@ def remove_spawns_at_border(desirable_coordinates, map_width, map_height):
 def set_coords_zero(desirable_coordinates, resource_indexes):
     for x, y in resource_indexes:
         try:
-            desirable_coordinates[y][x] = 0
+            desirable_coordinates[x][y] = 0
        
         except IndexError:
             continue
@@ -51,7 +44,7 @@ def set_coords_zero(desirable_coordinates, resource_indexes):
 def set_coords_one(desirable_coordinates, spawn_indexes):
     for x, y in spawn_indexes:
         try:
-            desirable_coordinates[y][x] = 1
+            desirable_coordinates[x][y] = 1
        
         except IndexError:
             continue
@@ -208,7 +201,7 @@ class Archimedes():
             '''
             img = env.render("rgb_array", width=48, height=48)
             px.imshow(img).show()
-            px.imshow(desirable_coordinates_filtered).show()
+            px.imshow(desirable_coordinates_filtered.T).show() # coordinates transposed to give correct view for some reason
             '''
 
 
@@ -227,11 +220,7 @@ class Archimedes():
                 potential_spawns = np.array(list(zip(*np.where(desirable_coordinates_filtered == 1))))
                 spawn_loc = potential_spawns[np.random.randint(0, len(potential_spawns))]
 
-                # potential_spawns coordinates are in wrong order for some reason
-                spawn_loc_x = spawn_loc[1]
-                spawn_loc_y = spawn_loc[0]
-
-                return dict(spawn=[spawn_loc_x, spawn_loc_y], metal=150, water=150)
+                return dict(spawn=spawn_loc, metal=150, water=150)
 
         # returns empty dictionary if no decisions were reached
         return dict()
@@ -244,119 +233,41 @@ class Archimedes():
         actions = dict()
         game_state: GameState = obs_to_game_state(step, self.env_cfg, obs)
         factories = game_state.factories[self.player]
+        game_state.teams[self.player].place_first
+        factory_tiles, factory_units = [], []
 
-        ### creation of bots
+
+        ### Creation of bots
+        heavy_bot_cost = self.env_cfg.ROBOTS["HEAVY"]
+        light_bot_cost = self.env_cfg.ROBOTS["HEAVY"]
         for unit_id, factory in factories.items():
-            if factory.power >= self.env_cfg.ROBOTS["HEAVY"].POWER_COST and \
-            factory.cargo.metal >= self.env_cfg.ROBOTS["HEAVY"].METAL_COST:
-                # sets factory with unit_id to construct light bot
+            if factory.power >= heavy_bot_cost.POWER_COST and factory.cargo.metal >= heavy_bot_cost.METAL_COST:
+                # sets factory with unit_id to construct heavy bot
                 actions[unit_id] = factory.build_heavy()
 
-        # gathers relevant info for decision making
-        units = game_state.units[self.player]
-        factory_tile_locations = np.array([factory.pos for id, factory in factories.items()])
-        factories_midpoint_x = np.mean([factory[0] for factory in factory_tile_locations])
-        factories_midpoint_y = np.mean([factory[1] for factory in factory_tile_locations])
-        factories_midpoint_coordinate = np.array([factories_midpoint_x, factories_midpoint_y])
 
-
-        ### finds all ice tiles and ore tiles, sorts by proximity to factory 
+        ### Finds all ice tiles, sorts by proximity to heavy bot
         ice_map = game_state.board.ice 
         ice_tile_locations = np.argwhere(ice_map == 1) # numpy magic to get the position of every ice tile
-        sorted_ice_locations = get_ordered_list(points=ice_tile_locations, x=factories_midpoint_coordinate[0], y=factories_midpoint_coordinate[1])
+        units = game_state.units[self.player]
 
-        ore_map = game_state.board.ore
-        ore_tile_locations = np.argwhere(ore_map == 1)
-        sorted_ore_locations = get_ordered_list(points=ore_tile_locations, x=factories_midpoint_coordinate[0], y=factories_midpoint_coordinate[1])
-
-
-        ### distributes 'tile assignments' for ore and ice tiles to 40 and 60 percent of the bots available, bots left are given ice assignments
-        num_bots = len(units)
-        ice_assignments = math.floor((num_bots * 0.4))
-        ore_assignments = math.floor((num_bots * 0.6))
-
-        # TODO Update the assignments to have n heavy bots on ice gathering just outside the factory, and some light for ore collection
-        # as long as distribution of assignments sum to 100%, only one remaining bot is required to give extra assignment
-        if (ice_assignments + ore_assignments) < num_bots:
-            ice_assignments += 1
-            ore_assignments += 1
-
-        assignment_count = 0
         for unit_id, unit in units.items():
-            if (assignment_count == (assignment_count - 1) ):
-                break
+            isHeavy = unit.unit_type == 'HEAVY'
+            isLight = unit.unit_type == 'LIGHT'
 
-            factory_tile_distances = np.mean((factory_tile_locations - unit.pos) ** 2, 1)
-            closest_factory_tile = factory_tile_locations[np.argmin(factory_tile_distances)]
-            moves_to_closest_factory = abs(closest_factory_tile[0] - unit.pos[0]) + abs(closest_factory_tile[1] - unit.pos[1])
+            ice_map = game_state.board.ice # flip the board as it stores by rows then columns
+            ice_tile_locations = np.argwhere(ice_map == 1) # numpy magic to get the position of every ice tile
+            sorted_ice_locations = sorted(ice_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )
 
-            # begins moving back if cargo is filled with ice
-            home_direction = direction_to(unit.pos, closest_factory_tile)
-            home_move_cost = unit.move_cost(game_state, home_direction) + unit.action_queue_cost(game_state)
-            if (unit.cargo.ice >= 20) or (unit.cargo.ore >= 20) or (unit.power <= (home_move_cost * moves_to_closest_factory)):
-                adjacent_to_factory = np.mean((closest_factory_tile - unit.pos) ** 2) == 0
+            if isHeavy and unit.cargo.ice == 0 and all(unit.pos == sorted_ice_locations[0]):
+                actions[unit_id] = [unit.dig(repeat=0)]
 
-                if adjacent_to_factory and (unit.cargo.ice > 0):
-                    direction = direction_to(unit.pos, closest_factory_tile)
-                    actions[unit_id] = [unit.transfer(direction, 0, unit.cargo.ice, repeat=0)]
-                    continue
+            elif isHeavy and unit.cargo.ice == 0 and not all(unit.pos == sorted_ice_locations[0]):
+                direction = direction_to(unit.pos, sorted_ice_locations[0])
+                actions[unit_id] = [unit.move(direction, repeat=0)]
 
-                if adjacent_to_factory and (unit.cargo.ore > 0):
-                    direction = direction_to(unit.pos, closest_factory_tile)
-                    actions[unit_id] = [unit.transfer(direction, 0, unit.cargo.ore, repeat=0)]
-                    continue
 
-                if adjacent_to_factory and (unit.cargo.ice == 0) and (unit.cargo.ore == 0):
-                    actions[unit_id] = [unit.recharge(150, repeat=0)]
-                    continue
-                
-                else:
-                    direction = direction_to(unit.pos, closest_factory_tile)
-                    actions[unit_id] = [unit.move(direction, repeat=0)]
-                    continue
-
-            # assigns bot to ice duty to closest ice tile
-            if assignment_count < ice_assignments:
-                # decides weather bot can be assigned, is on assignement tile and should dig, or if it should move towards tile
-                assignment_tile = sorted_ice_locations[0] if len(sorted_ice_locations) > 0 else 'unassigned'
-                direction = direction_to(unit.pos, assignment_tile)
-                move_power_cost = unit.move_cost(game_state, direction) + unit.action_queue_cost(game_state)
-                dig_power_cost = unit.dig_cost(game_state) + unit.action_queue_cost(game_state)
-                assignment_action_decision(
-                    unit=unit, 
-                    unit_id=unit_id,
-                    assignment_tile=assignment_tile,
-                    actions=actions,
-                    direction=direction,
-                    move_power_cost=move_power_cost,
-                    dig_power_cost=dig_power_cost
-                    )
-                sorted_ice_locations = np.delete(sorted_ice_locations, 0, axis=0) if len(sorted_ice_locations) > 0 else sorted_ice_locations
-                assignment_count += 1
-                continue
-
-            # assigns bot to ore duty to closest ore tile
-            if assignment_count >= ice_assignments and assignment_count < ore_assignments:
-                assignment_tile = sorted_ore_locations[0] if len(sorted_ore_locations) > 0 else 'unassigned'
-                direction = direction_to(unit.pos, assignment_tile)
-                move_power_cost = unit.move_cost(game_state, direction) + unit.action_queue_cost(game_state)
-                dig_power_cost = unit.dig_cost(game_state) + unit.action_queue_cost(game_state)
-                assignment_action_decision(
-                    unit=unit, 
-                    unit_id=unit_id,
-                    assignment_tile=assignment_tile,
-                    actions=actions,
-                    direction=direction,
-                    move_power_cost=move_power_cost,
-                    dig_power_cost=dig_power_cost
-                    )
-                sorted_ore_locations = np.delete(sorted_ore_locations, 0, axis=0) if len(sorted_ore_locations) > 0 else sorted_ore_locations
-                assignment_count += 1
-                continue
-
-            else:
-                assignment_count += 1
-                continue
+        ### Finds all ore tiles, sorts by proximity to light bot
 
 
         return actions
@@ -370,14 +281,8 @@ player0 = env.agents[0]
 player1 = env.agents[1]
 agents = {
     player0: Archimedes(env.agents[0], env.state.env_cfg), 
-    player1: default_agent.Agent_Default(env.agents[1], env.state.env_cfg)
+    player1: default_agent.Default_Agent(env.agents[1], env.state.env_cfg)
 }
 
-'''
-{'unit_4': [array([3, 0, 0, 0, 0, 1])]}
-<class 'numpy.ndarray'>
-{}
-<class 'numpy.ndarray'>
-{'unit_6': [array([0, 4, 0, 0, 0, 1])]}
-'''
+
 lux_functions.interact(env=env, agents=agents, steps=1000, video=True)

@@ -1,5 +1,8 @@
-from luxai2022.utils import animate
+from luxai_s2.env import LuxAI_S2
+from luxai_s2.utils import animate
 import numpy as np
+
+env = LuxAI_S2() # create the environment object
 
 # tools for animating actions in notebook
 def animate(imgs, _return=True):
