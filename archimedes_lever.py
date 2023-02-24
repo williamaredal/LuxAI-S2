@@ -1,21 +1,8 @@
-from luxai_s2.env import LuxAI_S2
 from lux.kit import obs_to_game_state, GameState, EnvConfig
 from lux.utils import my_turn_to_place_factory, direction_to 
 import numpy as np
-import plotly.express as px
+import random
 import math
-
-env = LuxAI_S2() # create the environment object
-obs = env.reset(seed=69) # resets an environment with a seed
-
-# the observation is always composed of observations for both players.
-obs.keys(), obs["player_0"].keys()
-
-# visualize the environment so far with rgb_array to get a quick look at the map
-# dark orange - high rubble, light orange - low rubble
-# blue = ice, yellow = ore
-img = env.render("rgb_array", width=48, height=48)
-px.imshow(img).show()
 
 
 def remove_spawns_at_border(desirable_coordinates, map_width, map_height):
@@ -125,8 +112,75 @@ def get_ordered_list(points, x, y):
     return p_list2
 
 
+# function used by Archimedes to check if tile is occupied by other bots
+def check_tile_occupation(game_state, unit_x, unit_y, direction, player, opponent):
+    friendly_bots = game_state.units[player]
+    hostile_bots = game_state.units[opponent]
+
+    friendly_coords = {(unit.pos[0], unit.pos[1]): unit.unit_type for (unit_id, unit) in friendly_bots.items()}
+    hostile_coords = {(unit.pos[0], unit.pos[1]): unit.unit_type for (unit_id, unit) in hostile_bots.items()}
+
+    # a[1] = direction (1 = up, 2 = right, 3 = down, 4 = left)
+    # move_deltas = np.array([0, -1], [1, 0], [0, 1], [-1, 0]])
+    bot_up = (unit_x, unit_y - 1)
+    bot_right = (unit_x + 1, unit_y)
+    bot_down = (unit_x, unit_y + 1)
+    bot_left = (unit_x - 1, unit_y)
 
 
+    # checks if no friendly is on direction tile, if none, direction remains, else set to 0
+    up_friendly = (bot_up not in friendly_coords) * 1
+    right_friendly = (bot_right not in friendly_coords) * 2
+    down_friendly = (bot_down not in friendly_coords) * 3
+    left_friendly = (bot_left not in friendly_coords) * 4
+
+    # checks if hostile bot is on direction tile, if there is one of type 'LIGHT', direction remains, else set to 0
+    up_hostile = True if (bot_up not in hostile_coords) or (bot_up in hostile_coords and hostile_coords[bot_up] == 'LIGHT' ) else False
+    right_hostile = True if (bot_up not in hostile_coords) or (bot_up in hostile_coords and hostile_coords[bot_up] == 'LIGHT' ) else False
+    down_hostile = True if (bot_up not in hostile_coords) or (bot_up in hostile_coords and hostile_coords[bot_up] == 'LIGHT' ) else False
+    left_hostile = True if (bot_up not in hostile_coords) or (bot_up in hostile_coords and hostile_coords[bot_up] == 'LIGHT' ) else False
+
+    '''
+    # this is where the hostile attack decision making will be placed, as distinguishing between light/heavy is important for combat
+    hostiles = [up_hostile, right_hostile, down_hostile, left_hostile]
+    '''
+    
+    # sets non occupied tile directions
+    up_free = up_friendly * up_hostile
+    right_free = right_friendly * right_hostile
+    down_free = down_friendly * down_hostile
+    left_free = left_friendly * left_hostile
+
+
+    # finds possible directions not occupied by friendly bots and hostile bots
+    directions = [up_free, right_free, down_free, left_free]
+    if direction in directions:
+        return direction
+    
+    elif sum(directions) > 0:
+        alt_directions = [d for d in directions if d > 0]
+        return random.choice(alt_directions)
+    '''
+    # this directs the random movement choice in the opposite axis to direction to keep the bot moving in the general direction
+    odd_direction = direction % 2 > 0
+    for alt_direction in directions:
+        alt_horisontal_directions = [d for d in directions if d > 0 and d % 2 == 0]
+        if odd_direction and len(alt_horisontal_directions) > 0:
+            return random.choice(alt_horisontal_directions)
+
+        alt_vertical_directions = [d for d in directions if d > 0 and d % 2 == 1]
+        if not odd_direction and len(alt_vertical_directions) > 0:
+            return random.choice(alt_vertical_directions)
+
+      []1
+    []2[][]4
+      []3
+    ''' 
+
+    # if all direction tiles occupied with friendly bots, recharge recommended
+    return -1
+
+    
 
 class Archimedes_Lever():
     def __init__(self, player: str, env_cfg: EnvConfig) -> None:
@@ -209,7 +263,7 @@ class Archimedes_Lever():
             return dict()
 
 
-
+    
     # Setup of logic in the act phase
     def act(self, step: int, obs, remainingOverageTime: int = 60):
         # info used to make decisions in the act phase
@@ -243,6 +297,8 @@ class Archimedes_Lever():
 
 
         
+
+
         ### Decides when the factories should start growing Lichen
         # Watering lichen if at right turn
         '''
@@ -255,11 +311,12 @@ class Archimedes_Lever():
                 if factory.water_cost(game_state) <= factory.cargo.water:
                     actions[unit_id] = factory.water()
         '''
-        growth_turn = 1000 - 77
+        growth_turn = 1000 - 100 # calculations suggenst 77 turns prior
         grow = game_state.real_env_steps >= growth_turn
         for factory_id, factory in factories.items():
-            if grow and factory.can_water:
-                factory.water
+            if grow and factory.can_water(game_state=game_state):
+                actions[unit_id] = factory.water()
+       
         
         ### Finds all ice and ore tiles
         ice_map = game_state.board.ice 
@@ -268,6 +325,7 @@ class Archimedes_Lever():
         ice_tile_locations = np.argwhere(ice_map == 1) # numpy magic to get the position of every ice tile
         ore_tile_locations = np.argwhere(ore_map == 1) # numpy magic to get the position of every ore tile
         rubble_tile_locations = np.argwhere(rubble_map > 0) # numpy magic to get the position of every rubble tile
+        closest_rubble_tile = rubble_tile_locations[0]
         units = game_state.units[self.player]
 
         for unit_id, unit in units.items():
@@ -275,16 +333,20 @@ class Archimedes_Lever():
             isLight = unit.unit_type == 'LIGHT'
 
             # info about closest map tiles
-            closest_ice_tile = sorted(ice_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )[0]
-            closest_ore_tile = sorted(ore_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )[0]
-            closest_rubble_tile = sorted(rubble_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )[0]
             closest_factory_tile = sorted(factory_tiles, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )[0]
+            closest_ice_tile = sorted(ice_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )[0]
+            closest_ore_tiles = sorted(ore_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )
+            closest_rubble_tiles = sorted(rubble_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )
+            closest_ore_tile = closest_ore_tiles[0]
+            closest_rubble_tile = closest_rubble_tiles[0]
+            light_ore_miners = 1
+            mine_assignments = 0
+            rubble_assignments = 0
 
             cargo_limit_ice = 100
             cargo_limit_ore = 50
             on_factory = all(unit.pos == closest_factory_tile)
-            ajacent_factory = 1 >= abs((unit.pos[0] - closest_factory_tile[0]) + (unit.pos[1] - closest_factory_tile[1]))
-
+            ajacent_factory = 1 >= abs((unit.pos[0] - closest_factory_tile[0])**2 + (unit.pos[1] - closest_factory_tile[1])**2)
 
 
             ### Heavy bot logic
@@ -294,6 +356,8 @@ class Archimedes_Lever():
                 on_ice = all(unit.pos == closest_ice_tile)
 
                 # Print out bot info 
+                #print(unit.unit_type, unit_id, "at:", unit.pos, "power and ice:", unit.power, unit.cargo.ice, "unit queue:", len(unit.action_queue))
+
                 # on ice, but not over cargo capacity limit
                 if on_ice and unit.cargo.ice < cargo_limit_ice and not below_power_threshold_heavy:
                     actions[unit_id] = [unit.dig(repeat=0)]
@@ -306,13 +370,13 @@ class Archimedes_Lever():
                     #print(unit_id, "move dig")
                 
                 # on factory, below power threshold, pickup power
-                elif on_factory and below_power_threshold_heavy:
+                elif ajacent_factory and below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_factory_tile)
                     actions[unit_id] = [unit.pickup(4, recharge_need_heavy, repeat=0)]
                     #print(unit_id, "recharging")
                 
                 # not on factory, below power threshold. move on factory
-                elif not on_factory and below_power_threshold_heavy:
+                elif not ajacent_factory and below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_factory_tile)
                     actions[unit_id] = [unit.move(direction, repeat=0)]
                     #print(unit_id, "move recharge")
@@ -333,6 +397,14 @@ class Archimedes_Lever():
             ### Finds all ore tiles, sorts by proximity to light bot
             ### Light bot logic
             if isLight:
+                # decides if the bot should be assigned an ore location or find closest rubble
+                on_ore_assignment = mine_assignments < light_ore_miners
+                if on_ore_assignment and mine_assignments < len(closest_ore_tiles):
+                    closest_ore_tile = closest_ore_tiles[mine_assignments]
+                    mine_assignments += 1
+                if not on_ore_assignment and rubble_assignments < len(closest_rubble_tiles):
+                    rubble_assignments += 1
+
                 power_threshold_light = 6
                 below_power_threshold_light = unit.power < power_threshold_light
                 power_for_dig = unit.power >= unit.dig_cost(game_state)
@@ -340,40 +412,82 @@ class Archimedes_Lever():
                 on_ore = all(unit.pos == closest_ore_tile)
                 on_rubble = all(unit.pos == closest_rubble_tile) 
 
+                # TODO remove the ore assignment to spread the bots
+
+                # Print out bot info 
+                #print(unit.unit_type, unit_id, "at:", unit.pos, "power and ore:", unit.power, unit.cargo.ore, "unit queue:", len(unit.action_queue))
 
                 # on ore, not on rubble, under cargo limit, not below power threshold. dig ore
                 if on_ore and not on_rubble and unit.cargo.ore < cargo_limit_ore and not below_power_threshold_light:
                     actions[unit_id] = [unit.dig(repeat=0)]
                     #print(unit_id, "dig ore")
                 
+
                 # on rubble, under cargo limit, not below power threshold. dig rubble
                 elif on_rubble and unit.cargo.ore < cargo_limit_ore and not below_power_threshold_light:
                     actions[unit_id] = [unit.dig(repeat=0)]
                     #print(unit_id, "dig rubble")
                 
-                # not on ore, not on rubble, under cargo limit, not below power threshold. move towards ore
-                elif not on_ore and not on_rubble and unit.cargo.ore < cargo_limit_ore and not below_power_threshold_light:
-                    # TODO add function that checks if direction leads to occupied tile, then retry with new direction from documentation until all directions tried, then recharge for one turn.
+
+                # on ore assignment, not on ore, not on rubble, under cargo limit, not below power threshold. move towards ore
+                elif on_ore_assignment and not on_ore and not on_rubble and unit.cargo.ore < cargo_limit_ore and not below_power_threshold_light:
                     direction = direction_to(unit.pos, closest_ore_tile)
-                    actions[unit_id] = [unit.move(direction, repeat=0)]
-                    #print(unit_id, "move to ore")
+                    newDirection = check_tile_occupation(game_state=game_state,
+                        unit_x=unit.pos[0],
+                        unit_y=unit.pos[1],
+                        direction=direction,
+                        player=self.player,
+                        opponent=self.opp_player
+                    )
+                
+                    if newDirection == -1:
+                        actions[unit_id] = [unit.recharge(unit.power + power_threshold_light)]
+                        #print(unit_id, "recharge instead of moving")
+                        
+                    else:
+                        actions[unit_id] = [unit.move(newDirection, repeat=0)]
+                        #print(unit_id, "move to ore")
+                    
+
+                # not on ore assignment, not on ore, not on rubble, under cargo limit, not below power threshold. move towards rubble
+                elif not on_ore_assignment and not on_ore and not on_rubble and unit.cargo.ore < cargo_limit_ore and not below_power_threshold_light:
+                    direction = direction_to(unit.pos, closest_rubble_tile)
+                    newDirection = check_tile_occupation(game_state=game_state,
+                        unit_x=unit.pos[0],
+                        unit_y=unit.pos[1],
+                        direction=direction,
+                        player=self.player,
+                        opponent=self.opp_player
+                    )
+
+                    if newDirection == -1:
+                        actions[unit_id] = [unit.recharge(unit.power + power_threshold_light)]
+                        #print(unit_id, "recharge instead of moving")
+                        
+                    else:
+                        actions[unit_id] = [unit.move(newDirection, repeat=0)]
+                        #print(unit_id, "move to rubble")
+
 
                 # below power threshold, no actions in queue. recharge to power threshold
                 elif below_power_threshold_light and len(unit.action_queue) < 1:
                     actions[unit_id] = [unit.recharge(power_threshold_light)]
                     #print(unit_id, "recharge")
                 
+
                 # ajacent to factory, at/over cargo limit, not below power threshold. transfer ore
                 elif ajacent_factory and unit.cargo.ore >= cargo_limit_ore and not below_power_threshold_light:
                     direction = direction_to(unit.pos, closest_factory_tile)
                     actions[unit_id] = [unit.transfer(direction, 1, unit.cargo.ore)]
                     #print(unit_id, "transfer cargo")
                 
+
                 # not ajacent to factory, at/over cargo limit, not below power threshold. move to factory
                 elif not ajacent_factory and unit.cargo.ore >= cargo_limit_ore and not below_power_threshold_light:
                     direction = direction_to(unit.pos, closest_factory_tile)
                     actions[unit_id] = [unit.move(direction, repeat=0)]
                     #print(unit_id, "move to transfer cargo")
+
                 
                 # wait for recharging queue to finish
                 else:
@@ -382,18 +496,3 @@ class Archimedes_Lever():
 
 
         return actions
-    
-
-import default_agent
-import lux_functions
-
-# recreate our agents and run
-player0 = env.agents[0]
-player1 = env.agents[1]
-agents = {
-    player0: Archimedes_Lever(env.agents[0], env.state.env_cfg), 
-    player1: default_agent.Default_Agent(env.agents[1], env.state.env_cfg)
-}
-
-
-lux_functions.interact(env=env, agents=agents, steps=1000, video=True)
