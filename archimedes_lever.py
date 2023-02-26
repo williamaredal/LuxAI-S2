@@ -8,11 +8,14 @@ import math
 def remove_spawns_at_border(desirable_coordinates, map_width, map_height):
     for x in range(0, map_width):
         desirable_coordinates[0][x] = 0
+        desirable_coordinates[1][x] = 0
         desirable_coordinates[map_width - 1][x] = 0
+        desirable_coordinates[map_width - 2][x] = 0
 
     for y in range(0, map_height):
         desirable_coordinates[0][x] = 0
         desirable_coordinates[y][map_height - 1] = 0
+        desirable_coordinates[y][map_height - 2] = 0
 
     return desirable_coordinates
 
@@ -39,6 +42,21 @@ def set_coords_one(desirable_coordinates, spawn_indexes):
     return desirable_coordinates
 
 
+def get_factory_tiles_from_center(x, y):
+    return np.array([
+        (x, y), # factory center
+        (x-1, y), (x, y-1), # left and top
+        (x+1, y), (x, y+1), # right and bottom
+        (x-1, y-1), (x+1, y-1), # diagonals
+        (x-1, y+1), (x+1, y+1), # diagonals
+    ]) 
+    '''
+    [.][.][.]
+    [.][.][.]
+    [.][.][.]
+    '''
+
+
 def get_factory_occupied_tiles(x, y):
     return np.array([
         (x, y), # factory center
@@ -52,14 +70,21 @@ def get_factory_occupied_tiles(x, y):
         (x+2, y+1), (x+1, y+2), (x+2, y+2), # right and bottom diagonals 
         (x+2, y-1), (x+1, y-2), (x+2, y-2), # right and top diagonals 
         (x-2, y+1), (x-1, y+2), (x-2, y+2), # left and bottom diagonals 
-        (x-3, y), (x, y-3), (x+3, y), (x, y+3), # left and top
-        (x-3, y), (x, y-3), (x+3, y), (x, y+3), # right and bottom
-        (x-3, y-1), (x-1, y-3), (x-3, y-3), # left and top diagonals 
-        (x+3, y+1), (x+1, y+3), (x+3, y+3), # right and bottom diagonals 
-        (x+3, y-1), (x+1, y-3), (x+3, y-3), # left and top diagonals 
-        (x-3, y+1), (x-1, y+3), (x-3, y+3), # right and bottom diagonals 
+        #(x-3, y), (x, y-3), (x+3, y), (x, y+3), # left and top
+        #(x-3, y), (x, y-3), (x+3, y), (x, y+3), # right and bottom
+        #(x-3, y-1), (x-1, y-3), (x-3, y-3), # left and top diagonals 
+        #(x+3, y+1), (x+1, y+3), (x+3, y+3), # right and bottom diagonals 
+        #(x+3, y-1), (x+1, y-3), (x+3, y-3), # left and top diagonals 
+        #(x-3, y+1), (x-1, y+3), (x-3, y+3), # right and bottom diagonals 
 
     ]) 
+    '''
+    [ ][ ][ ][ ][ ]
+    [ ][.][.][.][ ]
+    [ ][.][.][.][ ]
+    [ ][.][.][.][ ]
+    [ ][ ][ ][ ][ ]
+    '''
 
 
 def get_bordering_coords(x, y):
@@ -104,12 +129,6 @@ def neighbors(x, y):
     ])
     # expand this to include diagonal border coordinates, up to 3 away, or possibly make this method take a search grid range 
     # and return a np array with results from this grid range
-
-
-# function used by Archimedes for sorting list of resource locations by point x and y value
-def get_ordered_list(points, x, y):
-    p_list2 = sorted(points, key=lambda p: abs(p[0] - x) + abs(p[1] - y))
-    return p_list2
 
 
 # function used by Archimedes to check if tile is occupied by other bots
@@ -171,7 +190,9 @@ def check_tile_occupation(game_state, unit_x, unit_y, direction, player, opponen
         alt_vertical_directions = [d for d in directions if d > 0 and d % 2 == 1]
         if not odd_direction and len(alt_vertical_directions) > 0:
             return random.choice(alt_vertical_directions)
+    '''
 
+    '''
       []1
     []2[][]4
       []3
@@ -230,16 +251,18 @@ class Archimedes_Lever():
             desirable_coordinates_filtered = remove_spawns_at_border(desirable_coordinates=desirable_coordinates_filtered, map_width=map_width, map_height=map_height)
 
             # then replace coordinates where there are factories (and directly ajacent ones) with 0, as these are no longer valid spawn locations
-            factory_indexes = np.transpose(np.where(game_state.board.factory_occupancy_map > 0))
+            factory_indexes = np.transpose(np.where(game_state.board.factory_occupancy_map >= 0))
             if len(factory_indexes) > 0:
                 occupied_indexes = np.unique(np.concatenate([get_factory_occupied_tiles(*i) for i in factory_indexes]), axis=0)
                 desirable_coordinates_filtered = set_coords_zero(desirable_coordinates=desirable_coordinates_filtered, resource_indexes=occupied_indexes)
 
-
+            '''
             # visualizes the map and AI vision
-            #img = env.render("rgb_array", width=48, height=48)
-            #px.imshow(img).show()
-            #px.imshow(desirable_coordinates_filtered.T).show()
+            img = env.render("rgb_array", width=48, height=48)
+            px.imshow(game_state.board.rubble.T).show()
+            px.imshow(img).show()
+            px.imshow(desirable_coordinates_filtered.T).show()
+            '''
 
 
             ### Factory placement period
@@ -275,7 +298,9 @@ class Archimedes_Lever():
         # storing of info about factories
         factory_tiles, factory_units = [], []
         for unit_id, factory in factories.items():
-            factory_tiles += [factory.pos]
+            tiles = get_factory_tiles_from_center(x=factory.pos[0], y=factory.pos[1])
+            for tile in tiles:
+                factory_tiles += [tile]
             factory_units += [factory]
         factory_tiles = np.array(factory_tiles)
 
@@ -290,7 +315,7 @@ class Archimedes_Lever():
 
         
         # light bots
-        if game_state.real_env_steps >= 5:
+        if game_state.real_env_steps >= 2:
             for unit_id, factory in factories.items():
                 if factory.power >= light_bot_cost.POWER_COST and factory.cargo.metal >= light_bot_cost.METAL_COST:
                     actions[unit_id] = factory.build_light()
@@ -306,16 +331,13 @@ class Archimedes_Lever():
         # see google sheets for optimal time to start watering by looking at water cargo,
         # number of turns left, 
         # and the water cost from the calculus of water consumption growth
-
-        if self.env_cfg.max_episode_length - game_state.real_env_steps < 50:
-                if factory.water_cost(game_state) <= factory.cargo.water:
-                    actions[unit_id] = factory.water()
         '''
-        growth_turn = 1000 - 100 # calculations suggenst 77 turns prior
+        growth_turn = 990 - 300 # calculations suggenst 77 turns prior
         grow = game_state.real_env_steps >= growth_turn
         for factory_id, factory in factories.items():
-            if grow and factory.can_water(game_state=game_state):
-                actions[unit_id] = factory.water()
+            #print(factory_id, "has;", factory.cargo.metal, "metal", factory.cargo.water, "water", factory.cargo.ice, "ice", factory.power, "power", "watering cost: ", factory.water_cost(game_state))
+            if game_state.real_env_steps >= growth_turn:
+                actions[factory_id] = factory.water()
        
         
         ### Finds all ice and ore tiles
@@ -343,7 +365,7 @@ class Archimedes_Lever():
             mine_assignments = 0
             rubble_assignments = 0
 
-            cargo_limit_ice = 100
+            cargo_limit_ice = 960
             cargo_limit_ore = 50
             on_factory = all(unit.pos == closest_factory_tile)
             ajacent_factory = 1 >= abs((unit.pos[0] - closest_factory_tile[0])**2 + (unit.pos[1] - closest_factory_tile[1])**2)
@@ -351,7 +373,7 @@ class Archimedes_Lever():
 
             ### Heavy bot logic
             if isHeavy:
-                below_power_threshold_heavy = unit.power < 200
+                below_power_threshold_heavy = unit.power <= 100
                 recharge_need_heavy = math.floor(1000 - unit.power)
                 on_ice = all(unit.pos == closest_ice_tile)
 
@@ -370,13 +392,13 @@ class Archimedes_Lever():
                     #print(unit_id, "move dig")
                 
                 # on factory, below power threshold, pickup power
-                elif ajacent_factory and below_power_threshold_heavy:
+                elif on_factory and below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_factory_tile)
                     actions[unit_id] = [unit.pickup(4, recharge_need_heavy, repeat=0)]
                     #print(unit_id, "recharging")
                 
                 # not on factory, below power threshold. move on factory
-                elif not ajacent_factory and below_power_threshold_heavy:
+                elif not on_factory and below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_factory_tile)
                     actions[unit_id] = [unit.move(direction, repeat=0)]
                     #print(unit_id, "move recharge")
@@ -412,10 +434,6 @@ class Archimedes_Lever():
                 on_ore = all(unit.pos == closest_ore_tile)
                 on_rubble = all(unit.pos == closest_rubble_tile) 
 
-                # TODO remove the ore assignment to spread the bots
-
-                # Print out bot info 
-                #print(unit.unit_type, unit_id, "at:", unit.pos, "power and ore:", unit.power, unit.cargo.ore, "unit queue:", len(unit.action_queue))
 
                 # on ore, not on rubble, under cargo limit, not below power threshold. dig ore
                 if on_ore and not on_rubble and unit.cargo.ore < cargo_limit_ore and not below_power_threshold_light:
@@ -493,6 +511,6 @@ class Archimedes_Lever():
                 else:
                     #print("do nothing")
                     continue
-
+        
 
         return actions
