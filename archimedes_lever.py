@@ -70,12 +70,12 @@ def get_factory_occupied_tiles(x, y):
         (x+2, y+1), (x+1, y+2), (x+2, y+2), # right and bottom diagonals 
         (x+2, y-1), (x+1, y-2), (x+2, y-2), # right and top diagonals 
         (x-2, y+1), (x-1, y+2), (x-2, y+2), # left and bottom diagonals 
-        #(x-3, y), (x, y-3), (x+3, y), (x, y+3), # left and top
-        #(x-3, y), (x, y-3), (x+3, y), (x, y+3), # right and bottom
-        #(x-3, y-1), (x-1, y-3), (x-3, y-3), # left and top diagonals 
-        #(x+3, y+1), (x+1, y+3), (x+3, y+3), # right and bottom diagonals 
-        #(x+3, y-1), (x+1, y-3), (x+3, y-3), # left and top diagonals 
-        #(x-3, y+1), (x-1, y+3), (x-3, y+3), # right and bottom diagonals 
+        (x-3, y), (x, y-3), (x+3, y), (x, y+3), # left and top
+        (x-3, y), (x, y-3), (x+3, y), (x, y+3), # right and bottom
+        (x-3, y-1), (x-1, y-3), (x-3, y-3), # left and top diagonals 
+        (x+3, y+1), (x+1, y+3), (x+3, y+3), # right and bottom diagonals 
+        (x+3, y-1), (x+1, y-3), (x+3, y-3), # left and top diagonals 
+        (x-3, y+1), (x-1, y+3), (x-3, y+3), # right and bottom diagonals 
 
     ]) 
     '''
@@ -109,11 +109,11 @@ def neighbors(x, y):
         (x-2, y), (x, y-2), # left and top 
         (x+2, y), (x, y+2), # right and bottom 
 
-        (x-2, y-1), #(x-1, y-2), (x-2, y-2), # left and top diagonals 
-        (x+2, y+1), #(x+1, y+2), (x+2, y+2), # right and bottom diagonals 
+        (x-2, y-1), (x-1, y-2), # (x-2, y-2), # left and top diagonals 
+        (x+2, y+1), (x+1, y+2), # (x+2, y+2), # right and bottom diagonals 
 
-        (x+2, y-1), #(x+1, y-2), (x+2, y-2), # right and top diagonals 
-        (x-2, y+1), #(x-1, y+2), (x-2, y+2), # left and bottom diagonals 
+        (x+2, y-1), (x+1, y-2), # (x+2, y-2), # right and top diagonals 
+        (x-2, y+1), (x-1, y+2), # (x-2, y+2), # left and bottom diagonals 
 
         # commented away to try to get factory right next to resource
         # layer 3
@@ -127,8 +127,13 @@ def neighbors(x, y):
         #(x-3, y+1), (x-1, y+3), (x-3, y+3), # right and bottom diagonals 
 
     ])
-    # expand this to include diagonal border coordinates, up to 3 away, or possibly make this method take a search grid range 
-    # and return a np array with results from this grid range
+    '''
+    [ ][.][.][.][ ]
+    [.][ ][ ][ ][.]
+    [.][ ][X][ ][.]
+    [.][ ][ ][ ][.]
+    [ ][.][.][.][ ]
+    '''
 
 
 # function used by Archimedes to check if tile is occupied by other bots
@@ -218,72 +223,69 @@ class Archimedes_Lever():
             return dict(faction="AlphaStrike", bid=0)
         else:
             game_state = obs_to_game_state(step, self.env_cfg, obs)
+            my_turn_to_evaluate_spawns = my_turn_to_place_factory(game_state.teams[self.player].place_first, step)
 
-            ### Resets spawn mask coordinates and sets desirable coords with proximity to ice/ore coordinates as spawn coordinates
-            # sets all valid coordinates to 0 as only zero and one are possible 
-            desirable_coordinates_filtered = np.copy(game_state.board.valid_spawns_mask)
-            desirable_coordinates_filtered[desirable_coordinates_filtered == 1] = 0
+            # only processes map on my placement turns
+            if my_turn_to_evaluate_spawns:
+                ### Using numpy arrays, maps out desirable spawn locations
+                # gets border indexes of ore coordinates and ice coordinates
+                indOre = np.transpose(np.where(game_state.board.ore > 0))
+                indIce = np.transpose(np.where(game_state.board.ice > 0))
+                indFactories = np.transpose(np.where(game_state.board.factory_occupancy_map >= 0))
 
-            # gets border indexes of ore coordinates and ice coordinates
-            indOre = np.transpose(np.where(game_state.board.ore > 0))
-            oreSpawns = np.unique(np.concatenate([neighbors(*i) for i in indOre]), axis=0)
+                # finds possible spawns around resources
+                array_spawns = np.unique(np.concatenate(
+                    [neighbors(*ind) for ind in indIce],
+                    #[neighbors(*ind) for ind in iceSpawns],
+                    ), axis=0)
 
-            indIce = np.transpose(np.where(game_state.board.ice > 0))
-            iceSpawns = np.unique(np.concatenate([neighbors(*i) for i in indIce]), axis=0)
-
-            # sets coordinates around ore and ice to 1
-            '''
-            desirable_coordinates_filtered = set_coords_one(desirable_coordinates=desirable_coordinates_filtered, spawn_indexes=oreSpawns)
-            '''
-            desirable_coordinates_filtered = set_coords_one(desirable_coordinates=desirable_coordinates_filtered, spawn_indexes=iceSpawns)
-
-            # then replaces ore and ice coordinates (and directly ajacent ones) with 0, as these are not valid spawn locations
-            oreNeighb = np.unique(np.concatenate([get_bordering_coords(*i) for i in indOre]), axis=0)
-            desirable_coordinates_filtered = set_coords_zero(desirable_coordinates=desirable_coordinates_filtered, resource_indexes=oreNeighb)
-
-            iceNeighb = np.unique(np.concatenate([get_bordering_coords(*i) for i in indIce]), axis=0)
-            desirable_coordinates_filtered = set_coords_zero(desirable_coordinates=desirable_coordinates_filtered, resource_indexes=iceNeighb)
-            
-            
-            # then replace border coordinates with 0, as these are not valid spawn locations
-            map_width = len(desirable_coordinates_filtered[0])
-            map_height = len(desirable_coordinates_filtered)
-            desirable_coordinates_filtered = remove_spawns_at_border(desirable_coordinates=desirable_coordinates_filtered, map_width=map_width, map_height=map_height)
-
-            # then replace coordinates where there are factories (and directly ajacent ones) with 0, as these are no longer valid spawn locations
-            factory_indexes = np.transpose(np.where(game_state.board.factory_occupancy_map >= 0))
-            if len(factory_indexes) > 0:
-                occupied_indexes = np.unique(np.concatenate([get_factory_occupied_tiles(*i) for i in factory_indexes]), axis=0)
-                desirable_coordinates_filtered = set_coords_zero(desirable_coordinates=desirable_coordinates_filtered, resource_indexes=occupied_indexes)
-
-            '''
-            # visualizes the map and AI vision
-            img = env.render("rgb_array", width=48, height=48)
-            px.imshow(game_state.board.rubble.T).show()
-            px.imshow(img).show()
-            px.imshow(desirable_coordinates_filtered.T).show()
-            '''
+                # finds tiles that are occupied or invalid spawn coords
+                array_occupied_coords = np.unique(np.concatenate([get_factory_occupied_tiles(*i) for i in indFactories]), axis=0) if len(indFactories) > 0 else []
+                array_invalid_coords = np.unique(np.concatenate(
+                    (np.concatenate([get_bordering_coords(*ind) for ind in indOre], axis=0),
+                    np.concatenate([get_bordering_coords(*ind) for ind in indIce], axis=0))
+                ), axis=0)
 
 
-            ### Factory placement period
-            # how much water and metal you have in your starting pool to give to new factories
-            water_left = game_state.teams[self.player].water
-            metal_left = game_state.teams[self.player].metal
-            
-            # how many factories you have left to place
-            factories_to_place = game_state.teams[self.player].factories_to_place
+                # filters spawn coords for outside map coords, and those overlapping ivalid or occupied tiles
+                array_inside_map_spawns = [(np.array([c[0], c[1]]), game_state.board.rubble[c[0]][c[1]]) for c in array_spawns if (c[0] <= 46 and c[0] >= 1) and (c[1] <= 46 and c[1] >= 1)]
+                array_valid_spawns = [coord for coord in array_inside_map_spawns if 
+                    all(all(coord[0] == inv_coord) == False for inv_coord in array_invalid_coords) and 
+                    all(all(coord[0] == occ_coord) == False for occ_coord in array_occupied_coords)
+                ]
 
-            # whether it is your turn to place a factory
-            my_turn_to_place = my_turn_to_place_factory(game_state.teams[self.player].place_first, step)
-            if factories_to_place > 0 and my_turn_to_place:
-                # we will spawn our factory in a random location with 150 metal and water if it is our turn to place
-                potential_spawns = np.array(list(zip(*np.where(desirable_coordinates_filtered == 1))))
-                spawn_loc = potential_spawns[np.random.randint(0, len(potential_spawns))]
+                '''
+                desirable_coordinates_filtered = np.copy(game_state.board.valid_spawns_mask)
+                desirable_coordinates_filtered[desirable_coordinates_filtered == 1] = 0
+                # TODO mirror filtering here
+                # visualizes the map and AI vision
+                img = env.render("rgb_array", width=48, height=48)
+                #px.imshow(game_state.board.rubble.T).show()
+                px.imshow(img).show()
+                px.imshow(desirable_coordinates_filtered.T).show()
+                '''
 
-                return dict(spawn=spawn_loc, metal=150, water=150)
 
-            # returns empty dictionary if no decisions were reached
-            return dict()
+                ### Factory placement period
+                # how much water and metal you have in your starting pool to give to new factories
+                water_left = game_state.teams[self.player].water
+                metal_left = game_state.teams[self.player].metal
+                
+                # how many factories you have left to place
+                factories_to_place = game_state.teams[self.player].factories_to_place
+                # whether it is your turn to place a factory
+                my_turn_to_place = my_turn_to_place_factory(game_state.teams[self.player].place_first, step)
+
+                if factories_to_place > 0 and my_turn_to_place:
+                    # we will spawn our factory in a random location with 150 metal and water if it is our turn to place
+                    array_sorted_spawns = sorted(array_valid_spawns, key=lambda coord: coord[1])
+                    spawn_loc = array_sorted_spawns[0][0]
+
+                    return dict(spawn=spawn_loc, metal=150, water=150)
+
+            else:
+                # returns empty dictionary if no decisions were reached
+                return dict()
 
 
     
@@ -434,6 +436,8 @@ class Archimedes_Lever():
                 on_ore = all(unit.pos == closest_ore_tile)
                 on_rubble = all(unit.pos == closest_rubble_tile) 
 
+                # Print out bot info 
+                #print(unit.unit_type, unit_id, "at:", unit.pos, "power and ore:", unit.power, unit.cargo.ore, "unit queue:", len(unit.action_queue))
 
                 # on ore, not on rubble, under cargo limit, not below power threshold. dig ore
                 if on_ore and not on_rubble and unit.cargo.ore < cargo_limit_ore and not below_power_threshold_light:
