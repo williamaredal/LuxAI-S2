@@ -177,8 +177,25 @@ def neighbors(x, y):
     '''
 
 
+def coord_from_direction(x, y, direction):
+    if direction == 0:
+        return (x, y)
+    elif direction == 1:
+        return (x, y-1)
+    elif direction == 2:
+        return (x+1, y)
+    elif direction == 3:
+        return (x, y+1)
+    elif direction == 4:
+        return (x-1, y)
+'''
+# a[1] = direction (0 = center, 1 = up, 2 = right, 3 = down, 4 = left)
+move_deltas = np.array([[0, 0], [0, -1], [1, 0], [0, 1], [-1, 0]])
+'''
+
+
 # function used by Archimedes to check if tile is occupied by other bots
-def check_tile_occupation(game_state, unit_x, unit_y, direction, player, opponent):
+def check_tile_occupation(game_state, unit_x, unit_y, direction, booked_coords, player, opponent):
     friendly_bots = game_state.units[player]
     hostile_bots = game_state.units[opponent]
 
@@ -194,16 +211,16 @@ def check_tile_occupation(game_state, unit_x, unit_y, direction, player, opponen
 
 
     # checks if no friendly is on direction tile, if none, direction remains, else set to 0
-    up_friendly = (bot_up not in friendly_coords) * 1
-    right_friendly = (bot_right not in friendly_coords) * 2
-    down_friendly = (bot_down not in friendly_coords) * 3
-    left_friendly = (bot_left not in friendly_coords) * 4
+    up_friendly = (bot_up not in friendly_coords and bot_up not in booked_coords) * 1
+    right_friendly = (bot_right not in friendly_coords and bot_right not in booked_coords) * 2
+    down_friendly = (bot_down not in friendly_coords and bot_down not in booked_coords) * 3
+    left_friendly = (bot_left not in friendly_coords and bot_left not in booked_coords) * 4
 
     # checks if hostile bot is on direction tile, if there is one of type 'LIGHT', direction remains, else set to 0
     up_hostile = True if (bot_up not in hostile_coords) or (bot_up in hostile_coords and hostile_coords[bot_up] == 'LIGHT' ) else False
-    right_hostile = True if (bot_up not in hostile_coords) or (bot_up in hostile_coords and hostile_coords[bot_up] == 'LIGHT' ) else False
-    down_hostile = True if (bot_up not in hostile_coords) or (bot_up in hostile_coords and hostile_coords[bot_up] == 'LIGHT' ) else False
-    left_hostile = True if (bot_up not in hostile_coords) or (bot_up in hostile_coords and hostile_coords[bot_up] == 'LIGHT' ) else False
+    right_hostile = True if (bot_right not in hostile_coords) or (bot_right in hostile_coords and hostile_coords[bot_right] == 'LIGHT' ) else False
+    down_hostile = True if (bot_down not in hostile_coords) or (bot_down in hostile_coords and hostile_coords[bot_down] == 'LIGHT' ) else False
+    left_hostile = True if (bot_left not in hostile_coords) or (bot_left in hostile_coords and hostile_coords[bot_left] == 'LIGHT' ) else False
 
     '''
     # this is where the hostile attack decision making will be placed, as distinguishing between light/heavy is important for combat
@@ -245,7 +262,7 @@ def check_tile_occupation(game_state, unit_x, unit_y, direction, player, opponen
     ''' 
 
     # if all direction tiles occupied with friendly bots, recharge recommended
-    return -1
+    return 0
 
     
 
@@ -253,7 +270,7 @@ class Archimedes_Lever():
     def __init__(self, player: str, env_cfg: EnvConfig) -> None:
         self.player = player
         self.opp_player = "player_1" if self.player == "player_0" else "player_0"
-        #np.random.seed(0)
+        np.random.seed(0)
         self.env_cfg: EnvConfig = env_cfg
 
     # Setup of early game
@@ -384,8 +401,16 @@ class Archimedes_Lever():
             #print(factory_id, "has;", factory.cargo.metal, "metal", factory.cargo.water, "water", factory.cargo.ice, "ice", factory.power, "power", "watering cost: ", factory.water_cost(game_state))
             if game_state.real_env_steps >= growth_turn:
                 actions[factory_id] = factory.water()
-       
-        
+        '''
+        # TODO continue this experiment of water to power conversion to see what strategies this unlocks, such as more efficient clearing of rubble,
+        #      or mining assignments picking up power for ore mining
+        grow = game_state.real_env_steps % 3 == 0
+        for factory_id, factory in factories.items():
+            #print(factory_id, "has;", factory.cargo.metal, "metal", factory.cargo.water, "water", factory.cargo.ice, "ice", factory.power, "power", "watering cost: ", factory.water_cost(game_state))
+            if grow:
+                actions[factory_id] = factory.water()
+        '''
+
         ### Finds all ice and ore tiles
         ice_map = game_state.board.ice 
         ore_map = game_state.board.ore 
@@ -401,6 +426,11 @@ class Archimedes_Lever():
         light_ore_miners = 0
         mine_assignments = 0
         rubble_assignments = 0
+
+
+        # booked tiles for avoiding 
+        move_bookings = []
+
         for unit_id, unit in units.items():
             isHeavy = unit.unit_type == 'HEAVY'
             isLight = unit.unit_type == 'LIGHT'
@@ -437,6 +467,7 @@ class Archimedes_Lever():
                 # not on ice, not over cargo capacity limit. Move to ice
                 elif not on_ice and free_cargo_ice and not below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_ice_tile)
+                    move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction))
                     actions[unit_id] = [unit.move(direction, repeat=0)]
                     #print(unit_id, "move dig")
                 
@@ -449,6 +480,7 @@ class Archimedes_Lever():
                 # not on factory, below power threshold. Move to recharge
                 elif not on_factory and (below_power_threshold_heavy and not below_power_move_heavy):
                     direction = direction_to(unit.pos, closest_factory_tile)
+                    move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction))
                     actions[unit_id] = [unit.move(direction, repeat=0)]
                     #print(unit_id, "move recharge")
 
@@ -461,6 +493,7 @@ class Archimedes_Lever():
                 # not ajacent to factory. Move to transfer
                 elif not ajacent_factory and not free_cargo_ice and not below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_factory_tile)
+                    move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction))
                     actions[unit_id] = [unit.move(direction, repeat=0)]
                     #print(unit_id, "move transfer")
                 
@@ -527,15 +560,17 @@ class Archimedes_Lever():
                         unit_x=unit.pos[0],
                         unit_y=unit.pos[1],
                         direction=direction,
+                        booked_coords=move_bookings,
                         player=self.player,
                         opponent=self.opp_player
                     )
                 
-                    if newDirection == -1:
+                    if newDirection == 0:
                         continue
                         #print(unit_id, "recharge instead of moving")
                         
                     else:
+                        move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=newDirection))
                         actions[unit_id] = [unit.move(newDirection, repeat=0)]
                         #print(unit_id, "move to ore")
                     
@@ -547,15 +582,17 @@ class Archimedes_Lever():
                         unit_x=unit.pos[0],
                         unit_y=unit.pos[1],
                         direction=direction,
+                        booked_coords=move_bookings,
                         player=self.player,
                         opponent=self.opp_player
                     )
 
-                    if newDirection == -1:
+                    if newDirection == 0:
                         continue
                         #print(unit_id, "recharge instead of moving")
                         
                     else:
+                        move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=newDirection))
                         actions[unit_id] = [unit.move(newDirection, repeat=0)]
                         #print(unit_id, "move to rubble")
 
@@ -576,6 +613,7 @@ class Archimedes_Lever():
                 # not ajacent to factory, at/over cargo limit, not below power threshold, not charge state. Move to transfer
                 elif not ajacent_factory and not free_cargo_ore and not below_power_threshold_light and not charge_state:
                     direction = direction_to(unit.pos, closest_factory_tile)
+                    move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction))
                     actions[unit_id] = [unit.move(direction, repeat=0)]
                     #print(unit_id, "move to transfer cargo")
 
