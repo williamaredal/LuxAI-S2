@@ -128,4 +128,10 @@ def test_agents(env, agents, steps):
         done = dones["player_0"] and dones["player_1"]
     
     
-    return [('player_0', player0_total_lichen), ('player_1', player1_total_lichen), ('p0-p1 lichen difference:', player0_total_lichen - player1_total_lichen)] 
+    return [
+        ('player_0', player0_total_lichen),
+        ('player_1', player1_total_lichen),
+        ('p0 % performance:', (player0_total_lichen/player1_total_lichen)),
+        ('p0-p1 lichen difference:', player0_total_lichen - player1_total_lichen),
+        ('map seed:', env.state.seed),
+    ] 
