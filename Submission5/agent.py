@@ -445,7 +445,6 @@ class Archimedes_Lever():
         growth_turn = 990 - 300 # calculations suggenst 77 turns prior
         grow = game_state.real_env_steps >= growth_turn
         for factory_id, factory in factories.items():
-            print(factory_id, "has;", factory.cargo.metal, "metal", factory.cargo.water, "water", factory.cargo.ice, "ice", factory.power, "power", "watering cost: ", factory.water_cost(game_state))
             if game_state.real_env_steps >= growth_turn:
                 actions[factory_id] = factory.water()
         '''
