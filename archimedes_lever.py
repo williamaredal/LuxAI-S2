@@ -58,28 +58,6 @@ def rubble_tile_vision(x, y, rubble_map):
 '''
 
 
-def set_coords_zero(desirable_coordinates, resource_indexes):
-    for x, y in resource_indexes:
-        try:
-            desirable_coordinates[x][y] = 0
-       
-        except IndexError:
-            continue
-
-    return desirable_coordinates
-
-
-def set_coords_one(desirable_coordinates, spawn_indexes):
-    for x, y in spawn_indexes:
-        try:
-            desirable_coordinates[x][y] = 1
-       
-        except IndexError:
-            continue
-
-    return desirable_coordinates
-
-
 def get_factory_tiles_from_center(x, y):
     return np.array([
         (x, y), # factory center
@@ -88,11 +66,11 @@ def get_factory_tiles_from_center(x, y):
         (x-1, y-1), (x+1, y-1), # diagonals
         (x-1, y+1), (x+1, y+1), # diagonals
     ]) 
-    '''
-    [.][.][.]
-    [.][.][.]
-    [.][.][.]
-    '''
+'''
+[.][.][.]
+[.][.][.]
+[.][.][.]
+'''
 
 
 def get_factory_occupied_tiles(x, y):
@@ -117,7 +95,7 @@ def get_factory_occupied_tiles(x, y):
         (x-4, y), (x, y-4), (x+4, y), (x, y+4), # left and top
         (x-5, y), (x, y-5), (x+5, y), (x, y+5), # right and bottom
     ]) 
-    '''
+'''
     [ ][ ][.][ ][ ]
     [ ][ ][.][ ][ ]
     [ ][.][.][.][ ]
@@ -125,8 +103,31 @@ def get_factory_occupied_tiles(x, y):
     [ ][.][.][.][ ]
     [ ][ ][.][ ][ ]
     [ ][ ][.][ ][ ]
-    '''
+'''
 
+
+# TODO finish this so i can remove opponent factory tile neighbours from rubble removal
+def get_factory_neighbouring_tiles(x, y):
+    test_generator_coords = np.array([(x-j, y-k) for j in range(2, 3) for k in range(2, 3)])
+    coords =  np.array([
+        (x-2, y), (x, y-2), # left and top
+        (x+2, y), (x, y+2), # right and bottom
+        (x-2, y-2), (x+2, y-2), # top left corner
+        (x-2, y-2), (x+2, y-2), # diagonals
+
+        (x-2, y+2), (x+2, y+2), # diagonals
+        (x-2, y+2), (x+2, y+2), # diagonals
+    ])
+    return [coord for coord in coords if (coord[0] >= 0 and coord[0] <= 47) and (coord[1] >= 0 and coord[1] <= 47)]
+'''
+    [.][.][.][.][.][.][.]
+    [.][.][.][.][.][.][.]
+    [.][.][X][X][X][.][.]
+    [.][.][X][X][X][.][.]
+    [.][.][X][X][X][.][.]
+    [.][.][.][.][.][.][.]
+    [.][.][.][.][.][.][.]
+'''
 
 def get_bordering_coords(x, y):
     return np.array([
@@ -168,13 +169,13 @@ def neighbors(x, y):
         #(x-3, y+1), (x-1, y+3), (x-3, y+3), # right and bottom diagonals 
 
     ])
-    '''
-    [ ][.][.][.][ ]
-    [.][ ][ ][ ][.]
-    [.][ ][X][ ][.]
-    [.][ ][ ][ ][.]
-    [ ][.][.][.][ ]
-    '''
+'''
+[ ][.][.][.][ ]
+[.][ ][ ][ ][.]
+[.][ ][X][ ][.]
+[.][ ][ ][ ][.]
+[ ][.][.][.][ ]
+'''
 
 
 def coord_from_direction(x, y, direction):
@@ -264,7 +265,106 @@ def check_tile_occupation(game_state, unit_x, unit_y, direction, booked_coords, 
     # if all direction tiles occupied with friendly bots, recharge recommended
     return 0
 
+
+def heavy_overwatch(unit, unit_x, unit_y, on_factory, closest_factory_tile, game_state, opponent):
+    # gets hostile bot coords
+    hostile_bots = game_state.units[opponent]
+    hostile_coords_heavy = [(unit.pos[0], unit.pos[1]) for (unit_id, unit) in hostile_bots.items() if unit.unit_type == 'HEAVY']
+
+    # coords relative to bot position
+    bot_up = (unit_x, unit_y - 1)
+    bot_right = (unit_x + 1, unit_y)
+    bot_down = (unit_x, unit_y + 1)
+    bot_left = (unit_x - 1, unit_y)
+
+    # checks if hostile bot is on directly neighbouring tiles, and is of type HEAVY
+    up_hostile = True if (bot_up in hostile_coords_heavy) else False
+    right_hostile = True if (bot_right in hostile_coords_heavy) else False
+    down_hostile = True if (bot_down in hostile_coords_heavy) else False
+    left_hostile = True if (bot_left in hostile_coords_heavy) else False
+    hostile_on_flank = (up_hostile or right_hostile or down_hostile or left_hostile)
+
+    # check for heavy hostiles on opposing tiles, if on factory tile move on hostile tile, else move to closest factory tile 
+    if on_factory and hostile_on_flank:
+        up_target = up_hostile * 1
+        right_target = right_hostile * 2
+        down_target = down_hostile * 3
+        left_target = left_hostile * 4
+        directions = [up_target, right_target, down_target, left_target]
+        target_dir = [target for target in directions if target != 0]
+
+        return random.choice(target_dir)
     
+    # attack if energy is greater than 240
+    elif not on_factory and hostile_on_flank:
+        if unit.power > 240:
+            up_target = up_hostile * 1
+            right_target = right_hostile * 2
+            down_target = down_hostile * 3
+            left_target = left_hostile * 4
+            directions = [up_target, right_target, down_target, left_target]
+            target_dir = [target for target in directions if target != 0]
+            return random.choice(target_dir)
+        
+        else:
+            return direction_to(src=np.array([unit_x, unit_y]), target=closest_factory_tile)
+    
+    else:
+        return False
+
+
+def light_overwatch(unit, unit_x, unit_y, game_state, opponent):
+    # gets hostile bot coords
+    hostile_bots = game_state.units[opponent]
+    hostile_coords_heavy = [(unit.pos[0], unit.pos[1]) for (unit_id, unit) in hostile_bots.items() if unit.unit_type == 'HEAVY']
+    hostile_coords_light = [(unit.pos[0], unit.pos[1]) for (unit_id, unit) in hostile_bots.items() if unit.unit_type == 'LIGHT']
+
+    # coords relative to bot position
+    bot_up = (unit_x, unit_y - 1)
+    bot_right = (unit_x + 1, unit_y)
+    bot_down = (unit_x, unit_y + 1)
+    bot_left = (unit_x - 1, unit_y)
+
+    # checks if light hostile bot is on directly neighbouring tiles
+    up_hostile_light = True if (bot_up in hostile_coords_light) else False
+    right_hostile_light = True if (bot_right in hostile_coords_light) else False
+    down_hostile_light = True if (bot_down in hostile_coords_light) else False
+    left_hostile_light = True if (bot_left in hostile_coords_light) else False
+    light_hostile_on_flank = (up_hostile_light or right_hostile_light or down_hostile_light or left_hostile_light)
+
+    # checks if heavy hostile bot is on directly neighbouring tiles
+    up_hostile_heavy = True if (bot_up in hostile_coords_heavy) else False
+    right_hostile_heavy = True if (bot_right in hostile_coords_heavy) else False
+    down_hostile_heavy = True if (bot_down in hostile_coords_heavy) else False
+    left_hostile_heavy = True if (bot_left in hostile_coords_heavy) else False
+    heavy_hostile_on_flank = (up_hostile_heavy or right_hostile_heavy or down_hostile_heavy or left_hostile_heavy)
+
+
+    # if only heavy hostile on flank, returns direction that is away from heavy hostile
+    if heavy_hostile_on_flank and not light_hostile_on_flank:
+        if up_hostile_heavy:
+            return 3
+        elif right_hostile_heavy:
+            return 4
+        elif down_hostile_heavy:
+            return 1
+        elif left_hostile_heavy:
+            return 2
+    
+    # if light hostile on flank, attack
+    elif light_hostile_on_flank:
+        up_target = up_hostile_light * 1
+        right_target = right_hostile_light * 2
+        down_target = down_hostile_light * 3
+        left_target = left_hostile_light * 4
+        directions = [up_target, right_target, down_target, left_target]
+        target_dir = [target for target in directions if target != 0]
+        return random.choice(target_dir)
+    
+    else:
+        return False
+
+   
 
 class Archimedes_Lever():
     def __init__(self, player: str, env_cfg: EnvConfig) -> None:
@@ -315,6 +415,8 @@ class Archimedes_Lever():
                 '''
                 desirable_coordinates_filtered = np.copy(game_state.board.valid_spawns_mask)
                 desirable_coordinates_filtered[desirable_coordinates_filtered == 1] = 0
+                for coord in array_valid_spawns:
+                    desirable_coordinates_filtered[coord[0]][coord[1]] == 1
                 # TODO mirror filtering here
                 # visualizes the map and AI vision
                 img = env.render("rgb_array", width=48, height=48)
@@ -334,13 +436,18 @@ class Archimedes_Lever():
                 # whether it is your turn to place a factory
                 my_turn_to_place = my_turn_to_place_factory(game_state.teams[self.player].place_first, step)
 
-                if factories_to_place > 0 and my_turn_to_place:
+                if factories_to_place > 0 and my_turn_to_place and len(array_valid_spawns) > 0:
                     # we will spawn our factory in a random location with 150 metal and water if it is our turn to place
                     array_sorted_spawns = sorted(array_valid_spawns, key=lambda coord: coord[1])
                     #print("spawn choices", len(array_sorted_spawns))
+                    #print(array_sorted_spawns[0][0])
                     spawn_loc = array_sorted_spawns[0][0]
 
                     return dict(spawn=spawn_loc, metal=150, water=150)
+
+                else:
+                    # returns empty dictionary if there are no  valid spawn points to choose from
+                    return dict()
 
             else:
                 # returns empty dictionary if no decisions were reached
@@ -357,9 +464,11 @@ class Archimedes_Lever():
         game_state.teams[self.player].place_first
 
         # storing of info about factories
-        factory_tiles, factory_units = [], []
+        factory_tiles, factory_units, factory_centers = [], [], []
         for unit_id, factory in factories.items():
-            tiles = get_factory_tiles_from_center(x=factory.pos[0], y=factory.pos[1])
+            center = factory.pos
+            tiles = get_factory_tiles_from_center(x=center[0], y=center[1])
+            factory_centers += [center]
             for tile in tiles:
                 factory_tiles += [tile]
             factory_units += [factory]
@@ -395,11 +504,16 @@ class Archimedes_Lever():
         # number of turns left, 
         # and the water cost from the calculus of water consumption growth
         '''
-        growth_turn = 990 - 300 # calculations suggenst 77 turns prior
+        growth_turn = 990 - 250 # calculations suggenst 77 turns prior
+        turns_left = 988 - game_state.real_env_steps
         grow = game_state.real_env_steps >= growth_turn
         for factory_id, factory in factories.items():
             #print(factory_id, "has;", factory.cargo.metal, "metal", factory.cargo.water, "water", factory.cargo.ice, "ice", factory.power, "power", "watering cost: ", factory.water_cost(game_state))
-            if game_state.real_env_steps >= growth_turn:
+            water_cost_reactor = turns_left
+            water_per_turn = 3.2
+            water_formula = (factory.cargo.water - water_cost_reactor + (water_per_turn * turns_left)) > (factory.water_cost(game_state) * turns_left)
+            #print(factory_id, factory.cargo.water, factory.water_cost(game_state))
+            if game_state.real_env_steps >= growth_turn and water_formula:
                 actions[factory_id] = factory.water()
         '''
         # TODO continue this experiment of water to power conversion to see what strategies this unlocks, such as more efficient clearing of rubble,
@@ -419,7 +533,6 @@ class Archimedes_Lever():
         ore_tile_locations = np.argwhere(ore_map == 1) # numpy magic to get the position of every ore tile
         rubble_tile_locations = np.argwhere(rubble_map > 0) # numpy magic to get the position of every rubble tile
         rubble_tile_locations_low_rubble = np.argwhere(rubble_map <= 20)
-        closest_rubble_tile = rubble_tile_locations[0]
         units = game_state.units[self.player]
 
         ### Specifies assignments for heavy and light bots
@@ -457,10 +570,25 @@ class Archimedes_Lever():
                 # Print out bot info 
                 #print(unit.unit_type, unit_id, "at:", unit.pos, "power and ice:", unit.power, unit.cargo.ice, "unit queue:", len(unit.action_queue))
                 
-                # TODO perform some check if hostile bot is next to heavy bot vertical or horizontal axis
+                ### performs overwatch check to see if HEAVY bots on flanks
+                overwatch_check = heavy_overwatch(
+                    unit=unit,
+                    unit_x=unit.pos[0],
+                    unit_y=unit.pos[1],
+                    on_factory=on_factory,
+                    closest_factory_tile=closest_factory_tile,
+                    game_state=game_state,
+                    opponent=self.opp_player
+                )
+
+                # has hostile HEAVY on flank, moves to attack, or to factory tile if not already on one
+                if overwatch_check != False:
+                    move_bookings.append(overwatch_check)
+                    actions[unit_id] = [unit.move(overwatch_check, repeat=0)]
+                    continue
 
                 # on ice, but not over cargo capacity limit. Dig ice
-                if on_ice and free_cargo_ice and not below_power_threshold_heavy:
+                elif on_ice and free_cargo_ice and not below_power_threshold_heavy:
                     actions[unit_id] = [unit.dig(repeat=0)]
                     #print(unit_id, "digging")
                 
@@ -506,14 +634,12 @@ class Archimedes_Lever():
             ### Finds all ore tiles, sorts by proximity to light bot
             ### Light bot logic
             if isLight:
-                # TODO figure out weather to keep this vision function
-                #bot_rubble_vision = rubble_tile_vision(x=unit.pos[0], y=unit.pos[1], rubble_map=game_state.board.rubble)
                 # sorts low rubble tiles by proximity to closest factory tile to unit
-                sorted_rubble_tile_vision = sorted(filter(lambda x: game_state.board.rubble[x[0]][x[1]] != 0, rubble_tile_locations_low_rubble), key=lambda coord: (coord[0] - closest_factory_tile[0])**2 + (coord[1] - closest_factory_tile[1])**2)
+                sorted_rubble_tile_vision = sorted(filter(lambda x: (game_state.board.rubble[x[0]][x[1]] != 0) and (game_state.board.ice[x[0]][x[1]] != 1) and (game_state.board.ore[x[0]][x[1]] != 1), rubble_tile_locations_low_rubble), key=lambda coord: (coord[0] - closest_factory_tile[0])**2 + (coord[1] - closest_factory_tile[1])**2)
                 lowest_rubble__tile_visible = sorted_rubble_tile_vision[0]
 
                 closest_ore_tiles = sorted(ore_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )
-                closest_rubble_tiles = sorted(filter(lambda x: game_state.board.rubble[x[0]][x[1]] != 0, rubble_tile_locations_low_rubble), key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )
+                closest_rubble_tiles = sorted(rubble_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )
                 closest_ore_tile = closest_ore_tiles[0]
                 closest_rubble_tile = closest_rubble_tiles[0]
                 
@@ -526,7 +652,6 @@ class Archimedes_Lever():
                     rubble_assignments += 1
 
                 charge_state = game_state.is_day() and unit.power < 150 and not on_factory
-                # TODO implement charge_state for better charging utilization
                 power_threshold_light = 6
                 below_power_threshold_light = unit.power <= 6
                 power_for_dig = unit.power >= unit.dig_cost(game_state)
@@ -535,6 +660,28 @@ class Archimedes_Lever():
                 on_rubble = all(unit.pos == closest_rubble_tile)
                 free_cargo_ore = unit.cargo.ore < cargo_limit_ore
 
+                ### performs overwatch check to see if HEAVY bots on flanks
+                overwatch_check = light_overwatch(
+                    unit=unit,
+                    unit_x=unit.pos[0],
+                    unit_y=unit.pos[1],
+                    game_state=game_state,
+                    opponent=self.opp_player
+                )
+
+                if overwatch_check != False:
+                    newDirection = check_tile_occupation(
+                        game_state=game_state,
+                        unit_x=unit.pos[0],
+                        unit_y=unit.pos[1],
+                        direction=overwatch_check,
+                        booked_coords=move_bookings,
+                        player=self.player,
+                        opponent=self.opp_player
+                    )
+                    move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=newDirection))
+                    actions[unit_id] = [unit.move(newDirection, repeat=0)]
+                    continue
 
                 # Print out bot info 
                 #print(unit.unit_type, unit_id, "at:", unit.pos, "power and ore:", unit.power, unit.cargo.ore, "unit queue:", len(unit.action_queue))
