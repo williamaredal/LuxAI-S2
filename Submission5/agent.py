@@ -264,10 +264,10 @@ def check_tile_occupation(game_state, unit_x, unit_y, direction, booked_coords, 
     return 0
 
 
-def heavy_overwatch(unit_x, unit_y, on_factory, closest_factory_tile, game_state, opponent):
+def heavy_overwatch(unit, unit_x, unit_y, on_factory, closest_factory_tile, game_state, opponent):
     # gets hostile bot coords
     hostile_bots = game_state.units[opponent]
-    hostile_coords = {(unit.pos[0], unit.pos[1]): unit.unit_type for (unit_id, unit) in hostile_bots.items()}
+    hostile_coords_heavy = [(unit.pos[0], unit.pos[1]) for (unit_id, unit) in hostile_bots.items() if unit.unit_type == 'HEAVY']
 
     # coords relative to bot position
     bot_up = (unit_x, unit_y - 1)
@@ -276,10 +276,10 @@ def heavy_overwatch(unit_x, unit_y, on_factory, closest_factory_tile, game_state
     bot_left = (unit_x - 1, unit_y)
 
     # checks if hostile bot is on directly neighbouring tiles, and is of type HEAVY
-    up_hostile = True if (bot_up in hostile_coords and hostile_coords[bot_up] == 'HEAVY' ) else False
-    right_hostile = True if (bot_right in hostile_coords and hostile_coords[bot_right] == 'HEAVY' ) else False
-    down_hostile = True if (bot_down in hostile_coords and hostile_coords[bot_down] == 'HEAVY' ) else False
-    left_hostile = True if (bot_left in hostile_coords and hostile_coords[bot_left] == 'HEAVY' ) else False
+    up_hostile = True if (bot_up in hostile_coords_heavy) else False
+    right_hostile = True if (bot_right in hostile_coords_heavy) else False
+    down_hostile = True if (bot_down in hostile_coords_heavy) else False
+    left_hostile = True if (bot_left in hostile_coords_heavy) else False
     hostile_on_flank = (up_hostile or right_hostile or down_hostile or left_hostile)
 
     # check for heavy hostiles on opposing tiles, if on factory tile move on hostile tile, else move to closest factory tile 
@@ -291,10 +291,21 @@ def heavy_overwatch(unit_x, unit_y, on_factory, closest_factory_tile, game_state
         directions = [up_target, right_target, down_target, left_target]
         target_dir = [target for target in directions if target != 0]
 
-        return
+        return random.choice(target_dir)
     
+    # attack if energy is greater than 240
     elif not on_factory and hostile_on_flank:
-        return direction_to(src=np.array([unit_x, unit_y]), target=closest_factory_tile)
+        if unit.power > 240:
+            up_target = up_hostile * 1
+            right_target = right_hostile * 2
+            down_target = down_hostile * 3
+            left_target = left_hostile * 4
+            directions = [up_target, right_target, down_target, left_target]
+            target_dir = [target for target in directions if target != 0]
+            return random.choice(target_dir)
+        
+        else:
+            return direction_to(src=np.array([unit_x, unit_y]), target=closest_factory_tile)
     
     else:
         return False
@@ -434,7 +445,7 @@ class Archimedes_Lever():
         growth_turn = 990 - 300 # calculations suggenst 77 turns prior
         grow = game_state.real_env_steps >= growth_turn
         for factory_id, factory in factories.items():
-            #print(factory_id, "has;", factory.cargo.metal, "metal", factory.cargo.water, "water", factory.cargo.ice, "ice", factory.power, "power", "watering cost: ", factory.water_cost(game_state))
+            print(factory_id, "has;", factory.cargo.metal, "metal", factory.cargo.water, "water", factory.cargo.ice, "ice", factory.power, "power", "watering cost: ", factory.water_cost(game_state))
             if game_state.real_env_steps >= growth_turn:
                 actions[factory_id] = factory.water()
         '''
@@ -495,6 +506,7 @@ class Archimedes_Lever():
                 
                 ### performs overwatch check to see if HEAVY bots on flanks
                 overwatch_check = heavy_overwatch(
+                    unit=unit,
                     unit_x=unit.pos[0],
                     unit_y=unit.pos[1],
                     on_factory=on_factory,
