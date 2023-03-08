@@ -110,12 +110,35 @@ def get_tiles_by_interval(x, y, interval_x, interval_y):
     coordinates = np.array(
         [(x + n, y + m) for n in range((-1 * interval_x), interval_x +1) for m in range((-1 * interval_y), interval_y +1) if (0 <= (x + n) <= 47) and (0 <= (y + m) <= 47)]
     )
-    return coordinates 
+    return coordinates
 '''
     ^ interval y
     [ ][ ][ ]
-    [ ][X][ ]
     [ ][ ][ ]
+    [ ][ ][ ]
+    interval x ->
+'''
+
+
+def get_surrounding_tiles_by_interval(x, y, interval_x, interval_y):
+    coordinates = np.array(
+        [
+            (x + n, y + m) for n in range((-1 * interval_x), interval_x +1) for m in range((-1 * interval_y), interval_y +1) if
+            (0 <= (x + n) <= 47) and (n < -1 or n > 1) and
+            (0 <= (y + m) <= 47) and (m < -1 or m > 1)
+        ]
+    )
+    return coordinates 
+'''
+X = not marked factory tiles
+    ^ interval y
+    [ ][ ][ ][ ][ ][ ][ ]
+    [ ][ ][ ][ ][ ][ ][ ]
+    [ ][ ][X][X][X][ ][ ]
+    [ ][ ][X][X][X][ ][ ]
+    [ ][ ][X][X][X][ ][ ]
+    [ ][ ][ ][ ][ ][ ][ ]
+    [ ][ ][ ][ ][ ][ ][ ]
     interval x ->
 '''
 
@@ -420,13 +443,13 @@ class Archimedes_Lever():
 
 
                 # filters spawn coords for outside map coords (and those doesn't include spawns on map border), and those overlapping ivalid or occupied tiles
-                x_search_radius = 2
-                y_search_radius = 2
+                x_search_radius = 3
+                y_search_radius = 3
                 array_inside_map_spawns = [
                     (np.array(
                         [spawn_coord[0], spawn_coord[1]]), # first element in tuple is np array coordinate
                         np.average(                        # second elment in tuple is average rubble value from ajacent coords
-                            [game_state.board.rubble[c[0]][c[1]] for c in get_tiles_by_interval(x=spawn_coord[0], y=spawn_coord[1], interval_x=x_search_radius, interval_y=y_search_radius)]
+                            [game_state.board.rubble[c[0]][c[1]] for c in get_surrounding_tiles_by_interval(x=spawn_coord[0], y=spawn_coord[1], interval_x=x_search_radius, interval_y=y_search_radius)]
                         )
                     ) for spawn_coord in array_spawns if (1 <= spawn_coord[0] <= 46) and (1 <= spawn_coord[1] <= 46)
                 ]
