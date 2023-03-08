@@ -106,6 +106,20 @@ def get_factory_occupied_tiles(x, y):
 '''
 
 
+def get_tiles_by_interval(x, y, interval_x, interval_y):
+    coordinates = np.array(
+        [(x + n, y + m) for n in range((-1 * interval_x), interval_x +1) for m in range((-1 * interval_y), interval_y +1) if (0 <= (x + n) <= 47) and (0 <= (y + m) <= 47)]
+    )
+    return coordinates 
+'''
+    ^ interval y
+    [ ][ ][ ]
+    [ ][X][ ]
+    [ ][ ][ ]
+    interval x ->
+'''
+
+
 # TODO finish this so i can remove opponent factory tile neighbours from rubble removal
 def get_factory_neighbouring_tiles(x, y):
     test_generator_coords = np.array([(x-j, y-k) for j in range(2, 3) for k in range(2, 3)])
@@ -295,14 +309,14 @@ def heavy_overwatch(unit, unit_x, unit_y, on_factory, closest_factory_tile, game
 
         return random.choice(target_dir)
     
-    # attack if energy is greater than 240
+    # attack if energy is greater than 240, but introduced random choice to disengage and move home
     elif not on_factory and hostile_on_flank:
         if unit.power > 240:
             up_target = up_hostile * 1
             right_target = right_hostile * 2
             down_target = down_hostile * 3
             left_target = left_hostile * 4
-            directions = [up_target, right_target, down_target, left_target]
+            directions = [up_target, right_target, down_target, left_target, direction_to(np.array([unit_x, unit_y]), target=closest_factory_tile)]
             target_dir = [target for target in directions if target != 0]
             return random.choice(target_dir)
         
@@ -405,8 +419,17 @@ class Archimedes_Lever():
                 ), axis=0)
 
 
-                # filters spawn coords for outside map coords, and those overlapping ivalid or occupied tiles
-                array_inside_map_spawns = [(np.array([c[0], c[1]]), game_state.board.rubble[c[0]][c[1]]) for c in array_spawns if (c[0] <= 46 and c[0] >= 1) and (c[1] <= 46 and c[1] >= 1)]
+                # filters spawn coords for outside map coords (and those doesn't include spawns on map border), and those overlapping ivalid or occupied tiles
+                x_search_radius = 2
+                y_search_radius = 2
+                array_inside_map_spawns = [
+                    (np.array(
+                        [spawn_coord[0], spawn_coord[1]]), # first element in tuple is np array coordinate
+                        np.average(                        # second elment in tuple is average rubble value from ajacent coords
+                            [game_state.board.rubble[c[0]][c[1]] for c in get_tiles_by_interval(x=spawn_coord[0], y=spawn_coord[1], interval_x=x_search_radius, interval_y=y_search_radius)]
+                        )
+                    ) for spawn_coord in array_spawns if (1 <= spawn_coord[0] <= 46) and (1 <= spawn_coord[1] <= 46)
+                ]
                 array_valid_spawns = [coord for coord in array_inside_map_spawns if 
                     all(all(coord[0] == inv_coord) == False for inv_coord in array_invalid_coords) and 
                     all(all(coord[0] == occ_coord) == False for occ_coord in array_occupied_coords)
@@ -652,7 +675,6 @@ class Archimedes_Lever():
                     rubble_assignments += 1
 
                 charge_state = game_state.is_day() and unit.power < 150 and not on_factory
-                power_threshold_light = 6
                 below_power_threshold_light = unit.power <= 6
                 power_for_dig = unit.power >= unit.dig_cost(game_state)
                 recharge_need_light = math.floor(150 - unit.power)
