@@ -388,7 +388,7 @@ class Archimedes_Lever():
                 array_inside_map_spawns = [
                     (np.array(
                         [spawn_coord[0], spawn_coord[1]]), # first element in tuple is np array coordinate
-                        np.median(                        # second elment in tuple is median rubble value from ajacent coords
+                        np.average(                        # second elment in tuple is average rubble value from ajacent coords
                             [game_state.board.rubble[c[0]][c[1]] for c in get_surrounding_tiles_by_interval(x=spawn_coord[0], y=spawn_coord[1], interval_x=x_search_radius, interval_y=y_search_radius)]
                         )
                     ) for spawn_coord in array_spawns if (1 <= spawn_coord[0] <= 46) and (1 <= spawn_coord[1] <= 46)
