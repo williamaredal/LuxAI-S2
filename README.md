@@ -34,6 +34,9 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 * TODO Update spawn selection so that spawn rubble values are set to average rubble value for the 9 factory tiles and one tile around these.
      This allows selecting areas with lower rubble
 [X]
+* TODO Check if bidding 10 water and metal affects the number of factories that can be placed, if factories dont cost metal, bid 1 as default. This
+      secures the first, best location more often. Combined with selection of 3rd best spot forces opponent to choose more bad spots with more rubble
+ [X]
 
 ### Heavy behaviour
 * TODO Update the assignments to have n heavy bots on ice gathering just outside the factory, and some light for ore collection
@@ -71,6 +74,8 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 [X]
 * TODO Add function that checks surrounding tiles for hostiles if on ice or factory tile, that affects behaviour of heavy bots (moves bot on hostile heavy bot on ajacent tile, ambush this bot by moving onto this tile)
 [X]
+* TODO Set rubble clearing bots to collect power from closest factory if it goes above a certain level (nice synergy with last few turns)
+ [X]
 
 ### Misc
 * TODO Update files in repo, or move agent files to new repo. Basically move from beta to season 2.
