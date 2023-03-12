@@ -12,6 +12,8 @@ TODO Develop formula for when to start watering to optimize so that factory wate
 [X]
 TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 [X]
+* TODO Remove enemy factory tile coordinates from closest rubble low list to avoid clearing out rubble for opponent
+[X]
 
 ### Placement choice
 * TODO Make the agent place a factory right next to one ice tile
@@ -36,7 +38,7 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 [X]
 * TODO Check if bidding 10 water and metal affects the number of factories that can be placed, if factories dont cost metal, bid 1 as default. This
       secures the first, best location more often. Combined with selection of 3rd best spot forces opponent to choose more bad spots with more rubble
- [X]
+[X]
 
 ### Heavy behaviour
 * TODO Update the assignments to have n heavy bots on ice gathering just outside the factory, and some light for ore collection
