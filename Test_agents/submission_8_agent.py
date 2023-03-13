@@ -127,8 +127,8 @@ def get_surrounding_tiles_by_interval(x, y, interval_x, interval_y):
     coordinates = np.array(
         [
             (x + n, y + m) for n in range((-1 * interval_x), interval_x +1) for m in range((-1 * interval_y), interval_y +1) if
-            (0 <= (x + n) <= 47) and (n < -1 or n > 1) and
-            (0 <= (y + m) <= 47) and (m < -1 or m > 1)
+            (0 <= (x + n) <= 47) and (n < -1 or n > 1 or m < -1 or m > 1) and
+            (0 <= (y + m) <= 47) #and (m < -1 or m > 1)
         ]
     )
     return coordinates 
@@ -388,7 +388,7 @@ class Archimedes_Lever_s():
                 array_inside_map_spawns = [
                     (np.array(
                         [spawn_coord[0], spawn_coord[1]]), # first element in tuple is np array coordinate
-                        np.average(                        # second elment in tuple is average rubble value from ajacent coords
+                        np.mean(                        # second elment in tuple is mean rubble value from ajacent coords
                             [game_state.board.rubble[c[0]][c[1]] for c in get_surrounding_tiles_by_interval(x=spawn_coord[0], y=spawn_coord[1], interval_x=x_search_radius, interval_y=y_search_radius)]
                         )
                     ) for spawn_coord in array_spawns if (1 <= spawn_coord[0] <= 46) and (1 <= spawn_coord[1] <= 46)
@@ -460,9 +460,11 @@ class Archimedes_Lever_s():
             factory_units += [factory]
         factory_tiles = np.array(factory_tiles)
 
-        hostile_factory_tiles = []
+        hostile_factory_centers, hostile_factory_tiles = [], []
         for h_unit_id, h_factory in game_state.factories[self.opp_player].items():
             center = h_factory.pos
+            hostile_factory_centers.append(center)
+
             tiles = get_factory_tiles_from_center(x=center[0], y=center[1])
             for tile in tiles:
                 hostile_factory_tiles += [tile]
@@ -520,6 +522,22 @@ class Archimedes_Lever_s():
         ore_tile_locations = np.argwhere(ore_map == 1) # numpy magic to get the position of every ore tile
         rubble_tile_locations = np.argwhere(rubble_map > 0) # numpy magic to get the position of every rubble tile
         rubble_tile_locations_low_rubble = np.argwhere(rubble_map <= 20)
+
+        # sets hostile rubble mask
+        hostile_rubble_mask = np.zeros((48, 48))
+        hostile_factory_rubble = np.concatenate([
+            get_surrounding_tiles_by_interval(
+                x=hostile_factory_center[0],
+                y=hostile_factory_center[1],
+                interval_x=4,
+                interval_y=4
+            ) for hostile_factory_center in hostile_factory_centers
+        ], axis=0)
+        
+        for tile in hostile_factory_rubble:
+            hostile_rubble_mask[tile[1]][tile[0]] = 1
+
+
         units = game_state.units[self.player]
 
         ### Specifies assignments for heavy and light bots
@@ -620,8 +638,20 @@ class Archimedes_Lever_s():
             ### Light bot logic
             if isLight:
                 # sorts low rubble tiles by proximity to closest factory tile to unit
-                sorted_rubble_tile_vision = sorted(filter(lambda x: (game_state.board.rubble[x[0]][x[1]] != 0) and (game_state.board.ice[x[0]][x[1]] != 1) and (game_state.board.ore[x[0]][x[1]] != 1), rubble_tile_locations_low_rubble), key=lambda coord: (coord[0] - closest_factory_tile[0])**2 + (coord[1] - closest_factory_tile[1])**2)
+                sorted_rubble_tile_vision = sorted(
+                    [
+                        tile for tile in rubble_tile_locations_low_rubble if 
+                        (hostile_rubble_mask[tile[0]][tile[1]] != 1) and
+                        (game_state.board.rubble[tile[0]][tile[1]] != 0) and 
+                        (game_state.board.ice[tile[0]][tile[1]] != 1) and 
+                        (game_state.board.ore[tile[0]][tile[1]] != 1)
+                    ], 
+                    key=lambda coord: (coord[0] - closest_factory_tile[0])**2 + (coord[1] - closest_factory_tile[1])**2
+                )
+
                 lowest_rubble__tile_visible = sorted_rubble_tile_vision[0]
+                
+
 
                 closest_ore_tiles = sorted(ore_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )
                 closest_rubble_tiles = sorted(rubble_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )
@@ -638,10 +668,10 @@ class Archimedes_Lever_s():
 
                 # info about closest factory power and resources
                 closest_factory = [(factory_id, factory) for factory_id, factory in factories.items() if (closest_factory_tile in get_factory_tiles_from_center(x=factory.pos[0], y=factory.pos[1]))]
-                free_power = (closest_factory[0][1].power - (power_assignments * 150)) > 1500 
+                free_power = (closest_factory[0][1].power - (power_assignments * 150)) > 1500 or water_formula
                 #print(free_power, closest_factory[0][0], closest_factory[0][1].pos, closest_factory[0][1].power)
 
-                charge_state = game_state.is_day() and unit.power < 150 and not on_factory
+                charge_state = game_state.is_day() and unit.power < 150 and not on_factory and (not factory_power_formula or (game_state.real_env_steps >= 600 and water_formula))
                 below_power_threshold_light = unit.power <= 35
                 on_ore = all(unit.pos == closest_ore_tile)
                 on_rubble = all(unit.pos == closest_rubble_tile)
