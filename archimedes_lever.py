@@ -191,7 +191,7 @@ def coord_from_direction(x, y, direction):
         return (x-1, y)
 
 
-def expedition_check_tile_occupation(game_state, unit_x, unit_y, direction, booked_coords, player, opponent):
+def expedition_check_tile_occupation(game_state, unit_x, unit_y, direction, player, opponent):
     friendly_bots = game_state.units[player]
     hostile_bots = game_state.units[opponent]
 
@@ -208,18 +208,18 @@ def expedition_check_tile_occupation(game_state, unit_x, unit_y, direction, book
     bot_left = (unit_x - 1, unit_y)
 
     # checks if no friendly is on direction tile, if none, direction remains, else set to 0
-    up_friendly = (bot_up not in friendly_coords and (not any([bot_up == b_coord for b_coord in booked_coords]) or len(booked_coords) == 0)) * 1
-    right_friendly = (bot_right not in friendly_coords and (not any([bot_right == b_coord for b_coord in booked_coords]) or len(booked_coords) == 0)) * 2
-    down_friendly = (bot_down not in friendly_coords and (not any([bot_down == b_coord for b_coord in booked_coords]) or len(booked_coords) == 0)) * 3
-    left_friendly = (bot_left not in friendly_coords and (not any([bot_left == b_coord for b_coord in booked_coords]) or len(booked_coords) == 0)) * 4
+    up_friendly = (bot_up not in friendly_coords) * 1
+    right_friendly = (bot_right not in friendly_coords) * 2
+    down_friendly = (bot_down not in friendly_coords) * 3
+    left_friendly = (bot_left not in friendly_coords) * 4
 
 
 
     # checks if no friendly is on direction tile, if none, direction remains, else set to 0
-    up_friendly = (not any(bot_up == f_pos for f_pos in friendly_coords) and (not any(bot_up == b_coord for b_coord in booked_coords))) * 1
-    right_friendly = (not any(bot_right == f_pos for f_pos in friendly_coords) and (not any(bot_right == b_coord for b_coord in booked_coords))) * 2
-    down_friendly = (not any(bot_down == f_pos for f_pos in friendly_coords) and (not any(bot_down == b_coord for b_coord in booked_coords))) * 3
-    left_friendly = (not any(bot_left == f_pos for f_pos in friendly_coords) and (not any(bot_left == b_coord for b_coord in booked_coords))) * 4
+    up_friendly = (not any(bot_up == f_pos for f_pos in friendly_coords)) * 1
+    right_friendly = (not any(bot_right == f_pos for f_pos in friendly_coords)) * 2
+    down_friendly = (not any(bot_down == f_pos for f_pos in friendly_coords)) * 3
+    left_friendly = (not any(bot_left == f_pos for f_pos in friendly_coords)) * 4
     
     # checks if hostile bot is on direction tile, if there is one of type 'LIGHT', direction remains, else set to 0
     up_hostile = True if not any(bot_up == h_pos for h_pos in hostile_heavys) or any(bot_up == h_pos for h_pos in hostile_lights) else False
@@ -239,9 +239,6 @@ def expedition_check_tile_occupation(game_state, unit_x, unit_y, direction, book
     directions = [up_free, right_free, down_free, left_free]
     if direction in directions:
         return direction
-
-    if any(bot_center == b_coord for b_coord in booked_coords) and direction not in directions:
-        return random.choice([1, 2, 3, 4])
 
     # if all direction tiles occupied with friendly bots, recharge recommended
     return 0
@@ -637,7 +634,7 @@ class Archimedes_Lever():
             closest_ore_tile = sorted(ore_tile_locations, key=lambda p: abs(factory.pos[0] - p[0]) + abs(factory.pos[1] - p[1]))[0]
             manhattan_distance = abs(factory.pos[0] - closest_ore_tile[0]) + abs(factory.pos[1] - closest_ore_tile[1])
             if manhattan_distance <= expedition_distance_limit:
-                light_ore_miners += manhattan_distance - 1
+                light_ore_miners += manhattan_distance
 
         # booked tiles for avoiding 
         move_bookings = []
@@ -781,7 +778,6 @@ class Archimedes_Lever():
                         unit_x=unit.pos[0],
                         unit_y=unit.pos[1],
                         direction=overwatch_check,
-                        booked_coords=move_bookings,
                         player=self.player,
                         opponent=self.opp_player
                     )
@@ -789,7 +785,7 @@ class Archimedes_Lever():
                     actions[unit_id] = [unit.move(newDirection, repeat=0)]
                     continue
         
-                if all(unit.pos == self.home_factory[unit_id]):
+                if all(unit.pos == self.home_factory[unit_id]) and not on_ore_expedition:
                     direction_from_factory = random.choice([1, 2, 3, 4])
                     newDirection = check_tile_occupation(
                         game_state=game_state,
@@ -821,7 +817,6 @@ class Archimedes_Lever():
                         unit_x=unit.pos[0],
                         unit_y=unit.pos[1],
                         direction=direction,
-                        booked_coords=move_bookings,
                         player=self.player,
                         opponent=self.opp_player
                     )
