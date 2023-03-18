@@ -14,6 +14,8 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 [X]
 * TODO Remove enemy factory tile coordinates from closest rubble low list to avoid clearing out rubble for opponent
 [X]
+* TODO Make bots with ore assignments fetch power from factory with "pickup", as power is not utilized to full extent
+[X]
 
 ### Placement choice
 * TODO Make the agent place a factory right next to one ice tile
@@ -83,4 +85,10 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 * TODO Update files in repo, or move agent files to new repo. Basically move from beta to season 2.
 [X]
 * TODO Clean up structure of notebook cells and segments of the algorithm to make it easier to find where what desicion is being made
+[X]
+* TODO Introduce switch for light bots toggling between curren behaviour (after turn 200), and creation of a "human chain" on a ore tile, if 
+      there is one ore tile N distance away from the factory center tile (can find where center coords are defined).
+      Here one light bot is assigned as miner, while rest follows, and charges during daytime, and transfers M power forwards to mining bot.
+      The mining bot transfers ore towards factory tile, and supporting bots towards factory, if bot is on coordinate towards factory.
+      If no bot can recieve, the light bot starts moving towards factory to drop off ore (it has ore greater than free cargo space)
 [X]
