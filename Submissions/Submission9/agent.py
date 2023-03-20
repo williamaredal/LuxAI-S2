@@ -354,6 +354,7 @@ def heavy_overwatch(unit, unit_x, unit_y, on_factory, closest_factory_tile, game
         return False
 
 
+
 def light_overwatch(unit, unit_x, unit_y, booked_coords, game_state, player, opponent):
     # gets hostile bot coords
     hostile_bots = game_state.units[opponent]
@@ -406,7 +407,6 @@ def light_overwatch(unit, unit_x, unit_y, booked_coords, game_state, player, opp
     # move random if unit position is booked
     elif any(bot_center == b_coord for b_coord in booked_coords):
         evasion_direction = random.choice([1, 2, 3, 4])
-        booked_coords.append(coord_from_direction(x=unit_x, y=unit_y, direction=evasion_direction))
         newDirection = check_tile_occupation(
             game_state=game_state,
             unit_x=unit_x,
@@ -416,7 +416,8 @@ def light_overwatch(unit, unit_x, unit_y, booked_coords, game_state, player, opp
             player=player,
             opponent=opponent
         )
-        return evasion_direction
+        booked_coords.append(coord_from_direction(x=unit_x, y=unit_y, direction=newDirection))
+        return newDirection
 
     else:
         return False
@@ -637,7 +638,7 @@ class Archimedes_Lever():
             closest_ore_tile = sorted(ore_tile_locations, key=lambda p: abs(factory.pos[0] - p[0]) + abs(factory.pos[1] - p[1]))[0]
             manhattan_distance = abs(factory.pos[0] - closest_ore_tile[0]) + abs(factory.pos[1] - closest_ore_tile[1])
             if manhattan_distance <= expedition_distance_limit:
-                light_ore_miners += manhattan_distance - 1
+                light_ore_miners += manhattan_distance
 
         # booked tiles for avoiding 
         move_bookings = []
