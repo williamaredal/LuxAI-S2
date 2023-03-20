@@ -80,6 +80,9 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 [X]
 * TODO Set rubble clearing bots to collect power from closest factory if it goes above a certain level (nice synergy with last few turns)
  [X]
+* TODO Add bot behaviour for 1 light bot to serve as assistance for a heavy ice miner, providing power to it, thus achieving the max potential
+      ice harvesting from this method.
+[X]
 
 ### Misc
 * TODO Update files in repo, or move agent files to new repo. Basically move from beta to season 2.
@@ -91,4 +94,6 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
       Here one light bot is assigned as miner, while rest follows, and charges during daytime, and transfers M power forwards to mining bot.
       The mining bot transfers ore towards factory tile, and supporting bots towards factory, if bot is on coordinate towards factory.
       If no bot can recieve, the light bot starts moving towards factory to drop off ore (it has ore greater than free cargo space)
+[X]
+* TODO Look over all sorts for tiles to ensure they look for the closest tiles the right way
 [X]
