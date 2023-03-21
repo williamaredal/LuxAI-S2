@@ -83,6 +83,8 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 * TODO Add bot behaviour for 1 light bot to serve as assistance for a heavy ice miner, providing power to it, thus achieving the max potential
       ice harvesting from this method.
 [X]
+* TODO Modify light overwatch to try to move the bot towards home factory if heavy tries moving on its center
+[X]
 
 ### Misc
 * TODO Update files in repo, or move agent files to new repo. Basically move from beta to season 2.
