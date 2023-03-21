@@ -85,6 +85,16 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 [X]
 * TODO Modify light overwatch to try to move the bot towards home factory if heavy tries moving on its center
 [X]
+* TODO Modify light overwatch to fall back to factory if power below a certain level so that they winn more battles
+[X]
+* TODO Modift light overwatch so that assisting bots dont attack other light bots
+[X]
+* TODO Modify light overwatch so that bots are triggered by hostile light bots when on factory tile, but so that assisting bots dont attack
+[X]
+* TODO Add check on light overwatch to see if tile it wants to attack is in move_bookings, if it is, dont move there, but move towards home factory
+[X]
+* TODO Convert move_bookings to a dictionary, as i think the number of times it is used justifies usage of this as opposed to an array.
+[X]
 
 ### Misc
 * TODO Update files in repo, or move agent files to new repo. Basically move from beta to season 2.

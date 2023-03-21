@@ -208,6 +208,7 @@ def check_tile_occupation(game_state, unit_x, unit_y, direction, booked_coords, 
     friendly_coords = {(unit.pos[0], unit.pos[1]): unit.unit_type for (unit_id, unit) in friendly_bots.items()}
     hostile_coords = {(unit.pos[0], unit.pos[1]): unit.unit_type for (unit_id, unit) in hostile_bots.items()}
 
+    # coords relative to bot position
     # a[1] = direction (1 = up, 2 = right, 3 = down, 4 = left)
     # move_deltas = np.array([0, -1], [1, 0], [0, 1], [-1, 0]])
     bot_center = (unit_x, unit_y)
@@ -218,10 +219,10 @@ def check_tile_occupation(game_state, unit_x, unit_y, direction, booked_coords, 
 
 
     # checks if no friendly is on direction tile, if none, direction remains, else set to 0
-    up_friendly = (bot_up not in friendly_coords and (not any([bot_up == b_coord for b_coord in booked_coords]) or len(booked_coords) == 0)) * 1
-    right_friendly = (bot_right not in friendly_coords and (not any([bot_right == b_coord for b_coord in booked_coords]) or len(booked_coords) == 0)) * 2
-    down_friendly = (bot_down not in friendly_coords and (not any([bot_down == b_coord for b_coord in booked_coords]) or len(booked_coords) == 0)) * 3
-    left_friendly = (bot_left not in friendly_coords and (not any([bot_left == b_coord for b_coord in booked_coords]) or len(booked_coords) == 0)) * 4
+    up_friendly = (bot_up not in friendly_coords and (bot_up not in booked_coords)) * 1
+    right_friendly = (bot_right not in friendly_coords and (bot_right not in booked_coords)) * 2
+    down_friendly = (bot_down not in friendly_coords and (bot_down not in booked_coords)) * 3
+    left_friendly = (bot_left not in friendly_coords and (bot_left not in booked_coords)) * 4
 
     # checks if hostile bot is on direction tile, if there is one of type 'LIGHT', direction remains, else set to 0
     up_hostile = True if (bot_up not in hostile_coords) or (bot_up in hostile_coords and hostile_coords[bot_up] == 'LIGHT' ) else False
@@ -248,17 +249,21 @@ def check_tile_occupation(game_state, unit_x, unit_y, direction, booked_coords, 
     # if all direction tiles occupied with friendly bots, recharge recommended
     return 0
 '''
-      []1
-    []2[][]4
-      []3
+       []1
+    []2[]0[]4
+       []3
 '''
 
-def heavy_overwatch(unit, unit_x, unit_y, on_factory, closest_factory_tile, game_state, opponent):
+def heavy_overwatch(unit, on_factory, closest_factory_tile, game_state, opponent):
+    unit_x = unit.pos[0]
+    unit_y = unit.pos[1]
     # gets hostile bot coords
     hostile_bots = game_state.units[opponent]
     hostile_coords_heavy = [(unit.pos[0], unit.pos[1]) for (unit_id, unit) in hostile_bots.items() if unit.unit_type == 'HEAVY']
 
     # coords relative to bot position
+    # a[1] = direction (1 = up, 2 = right, 3 = down, 4 = left)
+    # move_deltas = np.array([0, -1], [1, 0], [0, 1], [-1, 0]])
     bot_up = (unit_x, unit_y - 1)
     bot_right = (unit_x + 1, unit_y)
     bot_down = (unit_x, unit_y + 1)
@@ -300,13 +305,17 @@ def heavy_overwatch(unit, unit_x, unit_y, on_factory, closest_factory_tile, game
         return False
 
 
-def light_overwatch(unit, on_factory, unit_x, unit_y, home_factory, booked_coords, game_state, player, opponent):
+def light_overwatch(unit, on_factory, on_ice_assistance, home_factory, booked_coords, overwatch_priority, game_state, player, opponent):
     # gets hostile bot coords
     hostile_bots = game_state.units[opponent]
     hostile_coords_heavy = [(unit.pos[0], unit.pos[1]) for (unit_id, unit) in hostile_bots.items() if unit.unit_type == 'HEAVY']
     hostile_coords_light = [(unit.pos[0], unit.pos[1]) for (unit_id, unit) in hostile_bots.items() if unit.unit_type == 'LIGHT']
 
     # coords relative to bot position
+    # a[1] = direction (1 = up, 2 = right, 3 = down, 4 = left)
+    # move_deltas = np.array([0, -1], [1, 0], [0, 1], [-1, 0]])
+    unit_x = unit.pos[0]
+    unit_y = unit.pos[1]
     bot_center = (unit_x, unit_y)
     bot_up = (unit_x, unit_y - 1)
     bot_right = (unit_x + 1, unit_y)
@@ -340,7 +349,7 @@ def light_overwatch(unit, on_factory, unit_x, unit_y, home_factory, booked_coord
             return 2
     
     # if light hostile on flank, attack
-    elif light_hostile_on_flank and not on_factory:
+    elif light_hostile_on_flank and unit.power >= 20 and not on_ice_assistance:
         up_target = up_hostile_light * 1
         right_target = right_hostile_light * 2
         down_target = down_hostile_light * 3
@@ -348,9 +357,24 @@ def light_overwatch(unit, on_factory, unit_x, unit_y, home_factory, booked_coord
         directions = [up_target, right_target, down_target, left_target]
         target_dir = [target for target in directions if target != 0]
         return random.choice(target_dir)
-    
-    # move random if unit position is booked
-    elif any(bot_center == b_coord for b_coord in booked_coords):
+
+    # if light on flank, but below unit power threshold
+    elif light_hostile_on_flank and unit.power < 20 and not on_ice_assistance:
+        direction = direction_to(unit.pos, home_factory)
+        newDirection = check_tile_occupation(
+            game_state=game_state,
+            unit_x=unit_x,
+            unit_y=unit_y,
+            direction=direction,
+            booked_coords=booked_coords,
+            player=player,
+            opponent=opponent
+        )
+        booked_coords[coord_from_direction(x=unit_x, y=unit_y, direction=newDirection)] = overwatch_priority
+        return newDirection
+
+    # move home if unit position is booked
+    elif bot_center in booked_coords:
         evasion_direction = direction_to([unit_x, unit_y], home_factory)
         newDirection = check_tile_occupation(
             game_state=game_state,
@@ -361,9 +385,10 @@ def light_overwatch(unit, on_factory, unit_x, unit_y, home_factory, booked_coord
             player=player,
             opponent=opponent
         )
-        booked_coords.append(coord_from_direction(x=unit_x, y=unit_y, direction=newDirection))
+        booked_coords[coord_from_direction(x=unit_x, y=unit_y, direction=newDirection)] = overwatch_priority
         return newDirection
 
+    # if no overwatch triggers return this status
     else:
         return False
 
@@ -411,8 +436,8 @@ class Archimedes_Lever():
 
 
                 # filters spawn coords for outside map coords (and those doesn't include spawns on map border), and those overlapping ivalid or occupied tiles
-                x_search_radius = 4
-                y_search_radius = 4
+                x_search_radius = 3
+                y_search_radius = 3
                 array_inside_map_spawns = [
                     (np.array(
                         [spawn_coord[0], spawn_coord[1]]), # first element in tuple is np array coordinate
@@ -531,7 +556,9 @@ class Archimedes_Lever():
                 interval_x=3,
                 interval_y=3
             )])
-            water_formula = (factory.cargo.water - water_cost_reactor + (water_per_turn * turns_left)) > (factory.water_cost(game_state) * (turns_left - lacking_space // 10))
+            base_water_cost = (factory.cargo.water - water_cost_reactor + (water_per_turn * turns_left))
+            water_cost_threshold = (factory.water_cost(game_state) * (turns_left - lacking_space // 10)) if (turns_left - (lacking_space // 10)) else (factory.water_cost(game_state) * turns_left)
+            water_formula = base_water_cost > water_cost_threshold
 
             # UNCOMMENT FOR TESTING OF LICHEN GROWTH
             '''
@@ -578,15 +605,24 @@ class Archimedes_Lever():
 
         units = game_state.units[self.player]
 
+
         ### Specifies assignments for heavy and light bots
         light_ice_supporters = len(factories)
         ice_support_assignments = 0
         rubble_assignments = 0
         power_assignments = 0
 
+        # action priority values
+        overwatch_priority = 6
+        pickup_priority = 5
+        transfer_priority = 4
+        dig_priority = 3
+        move_priority = 2
+        recharge_priority = 1
 
         # booked tiles for avoiding 
-        move_bookings = []
+        move_bookings = {}
+
 
         for unit_id, unit in units.items():
             # info about closest map tiles
@@ -608,7 +644,7 @@ class Archimedes_Lever():
             isHeavy = unit.unit_type == 'HEAVY'
             isLight = unit.unit_type == 'LIGHT'
 
-
+        
             ### Heavy bot logic
             if isHeavy:
                 #print('heavy', unit_id, unit.pos, unit.power)
@@ -621,21 +657,19 @@ class Archimedes_Lever():
                 # has hostile HEAVY on flank, moves to attack, or to factory tile if not already on one
                 overwatch_check = heavy_overwatch(
                     unit=unit,
-                    unit_x=unit.pos[0],
-                    unit_y=unit.pos[1],
                     on_factory=on_factory,
                     closest_factory_tile=closest_factory_tile,
                     game_state=game_state,
                     opponent=self.opp_player
                 )
                 if overwatch_check != False:
-                    move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=overwatch_check))
+                    move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=overwatch_check)] = overwatch_priority
                     actions[unit_id] = [unit.move(overwatch_check, repeat=0)]
                     continue
 
                 # on ice, but not over cargo capacity limit. Dig ice
                 elif on_ice and free_cargo_ice and not below_power_threshold_heavy:
-                    move_bookings.append((unit.pos[0], unit.pos[1]))
+                    move_bookings[(unit.pos[0], unit.pos[1])] = dig_priority
                     actions[unit_id] = [unit.dig(repeat=0)]
                     #print(unit_id, "digging")
                     continue
@@ -643,7 +677,7 @@ class Archimedes_Lever():
                 # not on ice, not over cargo capacity limit. Move to ice
                 elif not on_ice and free_cargo_ice and not below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_ice_tile)
-                    move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction))
+                    move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction)] = move_priority
                     actions[unit_id] = [unit.move(direction, repeat=0)]
                     #print(unit_id, "move dig")
                     continue
@@ -651,7 +685,7 @@ class Archimedes_Lever():
                 # on factory, below power threshold. Pickup power
                 elif on_factory and below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_factory_tile)
-                    move_bookings.append((unit.pos[0], unit.pos[1]))
+                    move_bookings[(unit.pos[0], unit.pos[1])] = pickup_priority
                     actions[unit_id] = [unit.pickup(4, recharge_need_heavy, repeat=0)]
                     #print(unit_id, "pickup power")
                     continue
@@ -669,12 +703,12 @@ class Archimedes_Lever():
                         opponent=self.opp_player
                     )
                     if newDirection != direction:
-                        move_bookings.append((unit.pos[0], unit.pos[1]))
+                        move_bookings[(unit.pos[0], unit.pos[1])] = recharge_priority
                         #print(unit_id, "move recharge, wait")
                         continue
 
                     elif newDirection == direction:
-                        move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction))
+                        move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction)] = move_priority
                         actions[unit_id] = [unit.move(direction, repeat=0)]
                         #print(unit_id, "move recharge")
                         continue
@@ -682,7 +716,7 @@ class Archimedes_Lever():
                 # ajacent to factory, over cargo limit. Transfer ice
                 elif ajacent_factory and not free_cargo_ice and not below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_factory_tile)
-                    move_bookings.append((unit.pos[0], unit.pos[1]))
+                    move_bookings[(unit.pos[0], unit.pos[1])] = transfer_priority
                     actions[unit_id] = [unit.transfer(direction, 0, unit.cargo.ice, repeat=0)]
                     #print(unit_id, "transfer")
                     continue
@@ -690,14 +724,14 @@ class Archimedes_Lever():
                 # not ajacent to factory. Move to transfer
                 elif not ajacent_factory and not free_cargo_ice and not below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_factory_tile)
-                    move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction))
+                    move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction)] = move_priority
                     actions[unit_id] = [unit.move(direction, repeat=0)]
                     #print(unit_id, "move transfer")
                     continue
                 
                 # not on factory, below critical power. Do nothing (recharge)
                 elif not on_factory and (below_power_threshold_heavy and below_power_move_heavy):
-                    move_bookings.append((unit.pos[0], unit.pos[1]))
+                    move_bookings[(unit.pos[0], unit.pos[1])] = recharge_priority
                     #print(unit_id, "doing nothing (recharging)")
                     continue
 
@@ -751,9 +785,19 @@ class Archimedes_Lever():
                 free_cargo_ore = unit.cargo.ore < 50
 
                 ### performs overwatch check to see if HEAVY bots on flanks
-                overwatch_check = light_overwatch(unit=unit, on_factory=on_factory, unit_x=unit.pos[0], unit_y=unit.pos[1], home_factory=self.home_factory[unit_id], booked_coords=move_bookings, game_state=game_state, player=self.player, opponent=self.opp_player)
+                overwatch_check = light_overwatch(
+                    unit=unit,
+                    on_factory=on_factory, 
+                    on_ice_assistance=on_ice_assistance, 
+                    home_factory=self.home_factory[unit_id], 
+                    booked_coords=move_bookings, 
+                    overwatch_priority=overwatch_priority,
+                    game_state=game_state, 
+                    player=self.player, 
+                    opponent=self.opp_player
+                )
                 if overwatch_check != False:
-                    move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=overwatch_check))
+                    move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=overwatch_check)] = overwatch_priority
                     actions[unit_id] = [unit.move(overwatch_check, repeat=0)]
                     #print(game_state.real_env_steps, unit_id, unit.pos, 'moving to', coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=overwatch_check), 'overwatch triggered')
                     continue
@@ -772,7 +816,7 @@ class Archimedes_Lever():
                         player=self.player,
                         opponent=self.opp_player
                     )
-                    move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=newDirection))
+                    move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=newDirection)] = move_priority
                     actions[unit_id] = [unit.move(direction=newDirection, repeat=0)]
                     #print(game_state.real_env_steps, unit_id, unit.pos, 'moving to assistance tile')
                     continue
@@ -784,12 +828,12 @@ class Archimedes_Lever():
                     move_occupied = any(target_coord == (unit.pos[0], unit.pos[1]) for unit_id, unit in units.items())
                     # if factory tile occupied, wait
                     if move_occupied:
-                        move_bookings.append((unit.pos[0], unit.pos[1]))
+                        move_bookings[(unit.pos[0], unit.pos[1])] = recharge_priority
                         continue
                     
                     # else move towards goal
                     elif not move_occupied:
-                        move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction))
+                        move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction)] = move_priority
                         actions[unit_id] = [unit.move(direction=direction, repeat=0)]
                         #print(game_state.real_env_steps, unit_id, unit.pos, 'moving from factory tile to assistance tile')
                         continue
@@ -806,28 +850,28 @@ class Archimedes_Lever():
                         transfer_supply = unit.power - 1
                         transfer_demand = 400 - target_bot[0].power
                         transfer_amount = transfer_demand -1 if (0 < transfer_demand <= transfer_supply) else transfer_supply - 1
-                        move_bookings.append((unit.pos[0], unit.pos[1]))
+                        move_bookings[(unit.pos[0], unit.pos[1])] = transfer_priority
                         actions[unit_id] = [unit.transfer(direction, 4, transfer_amount)]
                         #print(game_state.real_env_steps, unit_id, unit.pos, 'transferring power')
                         continue
 
                     # transfer nothing if there is no heavy bot on that tile
                     elif len(target_bot) == 0: 
-                        move_bookings.append((unit.pos[0], unit.pos[1]))
+                        move_bookings[(unit.pos[0], unit.pos[1])] = transfer_priority
                         #print(game_state.real_env_steps, unit_id, unit.pos, 'did not transfer power')
                         continue
 
 
                 # If on facotry tile, ajacent to ice, and has not transferrable power. Pickup power so it gets to max power.
                 elif on_ice_assistance and on_factory and not above_assistance_power:
-                    move_bookings.append((unit.pos[0], unit.pos[1]))
+                    move_bookings[(unit.pos[0], unit.pos[1])] = pickup_priority
                     actions[unit_id] = [unit.pickup(4, 150 - unit.power, repeat=0)]
                     #print(game_state.real_env_steps, unit_id, unit.pos, 'pickup power')
                     continue
 
                 # if bot is lost and not above power threshold, do nothing (recharge)
                 elif on_ice_assistance and not on_factory and not above_power_threshold_light:
-                    move_bookings.append((unit.pos[0], unit.pos[1]))
+                    move_bookings[(unit.pos[0], unit.pos[1])] = recharge_priority
                     #print(game_state.real_env_steps, unit_id, unit.pos, 'do nothing')
                     continue
                 
@@ -837,7 +881,7 @@ class Archimedes_Lever():
                 ### Rubble clearing duty
                 # on rubble, under cargo limit, not below power threshold, not charge state. Dig rubble
                 if on_rubble and free_cargo_ore and not below_power_threshold_light and not charge_state:
-                    move_bookings.append((unit.pos[0], unit.pos[1]))
+                    move_bookings[(unit.pos[0], unit.pos[1])] = dig_priority
                     actions[unit_id] = [unit.dig(repeat=0)]
                     #print(unit_id, "dig rubble")
 
@@ -854,26 +898,14 @@ class Archimedes_Lever():
                         player=self.player,
                         opponent=self.opp_player
                     )
-
-                    if newDirection == 0:
-                        move_bookings.append((unit.pos[0], unit.pos[1]))
-                        continue
-                        #print(unit_id, "recharge instead of moving")
-                    else:
-                        move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=newDirection))
-                        actions[unit_id] = [unit.move(newDirection, repeat=0)]
-                        #print(unit_id, "move to rubble")
-
-                # below power threshold and in a charge state. Do nothing (recharge)
-                elif below_power_threshold_light and charge_state:
-                    move_bookings.append((unit.pos[0], unit.pos[1]))
-                    continue
-                    #print(unit_id, "recharge")
-                
+                    move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=newDirection)] = move_priority
+                    actions[unit_id] = [unit.move(newDirection, repeat=0)]
+                    #print(unit_id, "move to rubble")
+               
                 # below power threshold, not in charge state, on factory tile, nearest factory power > 1500. Pickup power
                 elif below_power_threshold_light and not charge_state and on_factory and free_power:
                     power_assignments += 1
-                    move_bookings.append((unit.pos[0], unit.pos[1]))
+                    move_bookings[(unit.pos[0], unit.pos[1])] = pickup_priority
                     actions[unit_id] = [unit.pickup(4, 150 - unit.power, repeat=0)]
                     #print(unit_id, "pickup power light")
                 
@@ -890,14 +922,14 @@ class Archimedes_Lever():
                         player=self.player,
                         opponent=self.opp_player
                     )
+                    move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=newDirection)] = move_priority
+                    actions[unit_id] = [unit.move(newDirection, repeat=0)]
+                    #print(unit_id, "move to factory recharge")
 
-                    if newDirection == 0:
-                        move_bookings.append((unit.pos[0], unit.pos[1]))
-                        continue
-                        #print(unit_id, "recharge instead of moving")
-                    else:
-                        move_bookings.append(coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=newDirection))
-                        actions[unit_id] = [unit.move(newDirection, repeat=0)]
-                        #print(unit_id, "move to factory recharge")
-
+                # below power threshold and in a charge state. Do nothing (recharge)
+                elif below_power_threshold_light and charge_state:
+                    move_bookings[(unit.pos[0], unit.pos[1])] = recharge_priority
+                    continue
+                    #print(unit_id, "recharge")
+ 
         return actions
