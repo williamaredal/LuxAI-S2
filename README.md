@@ -60,6 +60,10 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 [X]
 * TODO Make heavy bots more defensive, and move to factory tile if low on power (made overwatch decision more random for moving home)
 [X]
+* TODO Fix the way heavy bots find their closest ice tile to look for manhattan distance from the heavy bots "home factory". And make further
+     measures to ensure they select only ice tiles that are on factory ajacent tiles. Mabye filter the ice tiles by the condition if they are
+     ajacent to a factory tile?
+[X]
 
 ### Light behaviour
 * TODO Incorporate a sorting function for rubble tiles as well as proximity to the light bot (changed to factory tile with closest proximity to unit),
