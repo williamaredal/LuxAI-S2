@@ -560,7 +560,7 @@ class Archimedes_Lever():
             
             base_water_cost = (factory.cargo.water - water_cost_reactor + (water_per_turn * turns_left))
             water_cost_threshold = (factory.water_cost(game_state) * turns_left)
-            water_formula = base_water_cost > water_cost_threshold
+            water_formula = base_water_cost > water_cost_threshold and factory.cargo.water > factory.water_cost(game_state)
 
             # UNCOMMENT FOR TESTING OF LICHEN GROWTH
             '''
