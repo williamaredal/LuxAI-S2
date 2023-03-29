@@ -392,7 +392,14 @@ def light_overwatch(unit, on_factory, on_ice_assistance, home_factory, booked_co
     else:
         return False
 
-   
+
+def get_closest_factory_tile(unit_x, unit_y, factories):
+    closest_factory = sorted([(factory.pos, factory) for factory_id, factory in factories.items()], key=lambda f: (f[0][0] - unit_x)**2 + (f[0][1] - unit_y)**2)[0]
+    factory_pos = closest_factory[0]
+    factory = closest_factory[1]
+    return (factory_pos, factory)
+
+
 
 class Archimedes_Lever():
     def __init__(self, player: str, env_cfg: EnvConfig) -> None:
@@ -550,14 +557,9 @@ class Archimedes_Lever():
         for factory_id, factory in factories.items():
             water_cost_reactor = turns_left
             water_per_turn = 3.2
-            lacking_space = sum([game_state.board.rubble[tile[0]][tile[1]] for tile in get_surrounding_tiles_by_interval(
-                x=factory.pos[0],
-                y=factory.pos[1],
-                interval_x=3,
-                interval_y=3
-            )])
+            
             base_water_cost = (factory.cargo.water - water_cost_reactor + (water_per_turn * turns_left))
-            water_cost_threshold = (factory.water_cost(game_state) * (turns_left - lacking_space // 10)) if (turns_left - (lacking_space // 10)) else (factory.water_cost(game_state) * turns_left)
+            water_cost_threshold = (factory.water_cost(game_state) * turns_left)
             water_formula = base_water_cost > water_cost_threshold
 
             # UNCOMMENT FOR TESTING OF LICHEN GROWTH
@@ -625,35 +627,83 @@ class Archimedes_Lever():
 
 
         for unit_id, unit in units.items():
+            # sets factory that built unit as home factory
+            if unit_id not in self.home_factory:
+                self.home_factory[unit_id] = get_closest_factory_tile(
+                    unit_x=unit.pos[0],
+                    unit_y=unit.pos[1],
+                    factories=factories
+                )
+
             # info about closest map tiles
             closest_factory_tile = sorted(factory_tiles, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )[0]
             closest_hostile_factory_tile = sorted(hostile_factory_tiles, key=lambda p: abs(p[0] - unit.pos[0]) + abs(p[1] - unit.pos[1]) )[0]
-            closest_ice_tile = sorted(ice_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )[0]
+            closest_ice_tile = sorted(ice_tile_locations, key=lambda p: (p[0] - self.home_factory[unit_id][0][0])**2 + (p[1] - self.home_factory[unit_id][0][1])**2 )[0]
             
             cargo_limit_ice = 960
             on_factory = all(unit.pos == closest_factory_tile)
             ajacent_factory = 1 >= (abs(unit.pos[0] - closest_factory_tile[0]) + abs(unit.pos[1] - closest_factory_tile[1]))
             ajacent_hostile_factory = 1 >= (abs(unit.pos[0] - closest_hostile_factory_tile[0]) + abs(unit.pos[1] - closest_hostile_factory_tile[1]))
             
-            # sets factory that built unit as home factory
-            if unit_id not in self.home_factory:
-                self.home_factory[unit_id] = closest_factory_tile
+            
 
             # relevant info for light and heavy bots
-            home_factory_tile = self.home_factory[unit_id]
+            home_factory_tile = self.home_factory[unit_id][0]
             isHeavy = unit.unit_type == 'HEAVY'
             isLight = unit.unit_type == 'LIGHT'
+
+
+             
 
         
             ### Heavy bot logic
             if isHeavy:
-                #print('heavy', unit_id, unit.pos, unit.power)
+                # sets new home factory if original died
+                if len([(factory_id, factory) for factory_id, factory in factories.items() if all(self.home_factory[unit_id][0] == factory.pos)]) == 0:
+                    self.home_factory[unit_id] = get_closest_factory_tile(
+                        unit_x=unit.pos[0],
+                        unit_y=unit.pos[1],
+                        factories=factories
+                    )
+
+                # info about unit's home factory power and resources
+                home_factory = [(factory_id, factory) for factory_id, factory in factories.items() if all(self.home_factory[unit_id][0] == factory.pos)]
+
+               #print('heavy', unit_id, unit.pos, unit.power)
                 below_power_threshold_heavy = unit.power <= 100
                 below_power_move_heavy = unit.power <= 50
                 free_cargo_ice = unit.cargo.ice < cargo_limit_ice
                 recharge_need_heavy = math.floor(3000 - unit.power)
                 on_ice = all(unit.pos == closest_ice_tile)
-                
+
+                # condition for when heavy is set to clear rubble
+                on_rubble_clearing = (home_factory[0][1].cargo.water) > 500 and 0 != sum(
+                    [game_state.board.rubble[tile[0]][tile[1]] for tile in get_surrounding_tiles_by_interval(
+                        x=home_factory[0][1].pos[0], 
+                        y=home_factory[0][1].pos[1], 
+                        interval_x=2,
+                        interval_y=2
+                    ) if game_state.board.ore[tile[0]][tile[1]] != 1]
+                )
+                #print(on_rubble_clearing, home_factory[0][0], home_factory[0][1].pos, home_factory[0][1].power, home_factory[0][1].cargo.water)
+                if on_rubble_clearing:
+                    closest_rubble_tiles = sorted(rubble_tile_locations, key=lambda p: abs(p[0] - unit.pos[0]) + abs(p[1] - unit.pos[1]))
+                    closest_rubble_tile = closest_rubble_tiles[0]
+                    on_rubble = all(unit.pos == closest_rubble_tile)
+                    factory_rubble_tiles = [coord for coord in get_surrounding_tiles_by_interval(
+                        x=home_factory[0][1].pos[0],
+                        y=home_factory[0][1].pos[1],
+                        interval_x=2,
+                        interval_y=2
+                    )]
+
+                    closest_factory_rubble_tile = sorted([tile for tile in factory_rubble_tiles if 
+                        (game_state.board.rubble[tile[0]][tile[1]] != 0) and 
+                        (game_state.board.ore[tile[0]][tile[1]] != 1)
+                    ], key=lambda p: (game_state.board.rubble[p[0]][p[1]]))[0]
+                    #print(unit_id, closest_factory_rubble_tile)
+
+
                 # has hostile HEAVY on flank, moves to attack, or to factory tile if not already on one
                 overwatch_check = heavy_overwatch(
                     unit=unit,
@@ -667,15 +717,32 @@ class Archimedes_Lever():
                     actions[unit_id] = [unit.move(overwatch_check, repeat=0)]
                     continue
 
+                ### Clearing factory rubble
+                # on rubble clearing, on rubble, not below power limit. Dig rubble
+                elif on_rubble_clearing and on_rubble and not below_power_threshold_heavy:
+                    move_bookings[(unit.pos[0], unit.pos[1])] = dig_priority
+                    actions[unit_id] = [unit.dig(repeat=0)]
+                    #print(unit_id, "clearing factory rubble")
+                    continue
+
+                # on rubble clearing, not on rubble, not below power limit. Move to factory rubble
+                elif on_rubble_clearing and not on_rubble and not below_power_threshold_heavy:
+                    direction = direction_to(unit.pos, closest_factory_rubble_tile)
+                    move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction)] = move_priority
+                    actions[unit_id] = [unit.move(direction, repeat=0)]
+                    #print(unit_id, "moving to factory rubble")
+                    continue
+
+                ### Collecting ice
                 # on ice, but not over cargo capacity limit. Dig ice
-                elif on_ice and free_cargo_ice and not below_power_threshold_heavy:
+                elif not on_rubble_clearing and on_ice and free_cargo_ice and not below_power_threshold_heavy:
                     move_bookings[(unit.pos[0], unit.pos[1])] = dig_priority
                     actions[unit_id] = [unit.dig(repeat=0)]
                     #print(unit_id, "digging")
                     continue
                 
                 # not on ice, not over cargo capacity limit. Move to ice
-                elif not on_ice and free_cargo_ice and not below_power_threshold_heavy:
+                elif not on_rubble_clearing and not on_ice and free_cargo_ice and not below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_ice_tile)
                     move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction)] = move_priority
                     actions[unit_id] = [unit.move(direction, repeat=0)]
@@ -683,7 +750,7 @@ class Archimedes_Lever():
                     continue
                 
                 # on factory, below power threshold. Pickup power
-                elif on_factory and below_power_threshold_heavy:
+                elif not on_rubble_clearing and on_factory and below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_factory_tile)
                     move_bookings[(unit.pos[0], unit.pos[1])] = pickup_priority
                     actions[unit_id] = [unit.pickup(4, recharge_need_heavy, repeat=0)]
@@ -691,7 +758,7 @@ class Archimedes_Lever():
                     continue
                 
                 # not on factory, below power threshold. Move to recharge
-                elif not on_factory and (below_power_threshold_heavy and not below_power_move_heavy):
+                elif not on_rubble_clearing and not on_factory and (below_power_threshold_heavy and not below_power_move_heavy):
                     direction = direction_to(unit.pos, closest_factory_tile)
                     newDirection = check_tile_occupation(
                         game_state=game_state,
@@ -714,7 +781,7 @@ class Archimedes_Lever():
                         continue
 
                 # ajacent to factory, over cargo limit. Transfer ice
-                elif ajacent_factory and not free_cargo_ice and not below_power_threshold_heavy:
+                elif not on_rubble_clearing and ajacent_factory and not free_cargo_ice and not below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_factory_tile)
                     move_bookings[(unit.pos[0], unit.pos[1])] = transfer_priority
                     actions[unit_id] = [unit.transfer(direction, 0, unit.cargo.ice, repeat=0)]
@@ -722,7 +789,7 @@ class Archimedes_Lever():
                     continue
 
                 # not ajacent to factory. Move to transfer
-                elif not ajacent_factory and not free_cargo_ice and not below_power_threshold_heavy:
+                elif not on_rubble_clearing and not ajacent_factory and not free_cargo_ice and not below_power_threshold_heavy:
                     direction = direction_to(unit.pos, closest_factory_tile)
                     move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction)] = move_priority
                     actions[unit_id] = [unit.move(direction, repeat=0)]
@@ -738,6 +805,18 @@ class Archimedes_Lever():
 
             ### Light bot logic
             if isLight:
+                # sets new home factory if original died
+                if len([(factory_id, factory) for factory_id, factory in factories.items() if all(self.home_factory[unit_id][0] == factory.pos)]) == 0:
+                    self.home_factory[unit_id] = get_closest_factory_tile(
+                        unit_x=unit.pos[0],
+                        unit_y=unit.pos[1],
+                        factories=factories
+                    )
+
+                # info about unit's home factory power and resources
+                home_factory = [(factory_id, factory) for factory_id, factory in factories.items() if all(self.home_factory[unit_id][0] == (factory.pos[0], factory.pos[1]))]
+                free_power = (home_factory[0][1].power - (power_assignments * 150)) > 500
+
                 # sorts low rubble tiles by proximity to closest factory tile to unit
                 sorted_rubble_tile_vision = sorted(
                     [
@@ -749,13 +828,11 @@ class Archimedes_Lever():
                     ], 
                     key=lambda coord: (coord[0] - closest_factory_tile[0])**2 + (coord[1] - closest_factory_tile[1])**2
                 )
-
-                
                 lowest_rubble__tile_visible = sorted_rubble_tile_vision[0]
                 
 
-                closest_ore_tiles = sorted(ore_tile_locations, key=lambda p: abs(p[0] - self.home_factory[unit_id][0]) + abs(p[1] - self.home_factory[unit_id][1]))
-                closest_ice_tiles = sorted(ice_tile_locations, key=lambda p: (p[0] - self.home_factory[unit_id][0])**2 + (p[1] - self.home_factory[unit_id][1])**2 )
+                closest_ore_tiles = sorted(ore_tile_locations, key=lambda p: abs(p[0] - self.home_factory[unit_id][0][0]) + abs(p[1] - self.home_factory[unit_id][0][1]))
+                closest_ice_tiles = sorted(ice_tile_locations, key=lambda p: (p[0] - self.home_factory[unit_id][0][0])**2 + (p[1] - self.home_factory[unit_id][0][1])**2 )
                 closest_rubble_tiles = sorted(rubble_tile_locations, key=lambda p: abs(p[0] - unit.pos[0]) + abs(p[1] - unit.pos[1]))
                 closest_ore_tile = closest_ore_tiles[0]
                 closest_ice_tile = closest_ice_tiles[0]
@@ -768,11 +845,6 @@ class Archimedes_Lever():
                 on_ice_assistance = ice_support_assignments < light_ice_supporters
                 if on_ice_assistance:
                     ice_support_assignments += 1
-
-                # info about closest factory power and resources
-                closest_factory = [(factory_id, factory) for factory_id, factory in factories.items() if (closest_factory_tile in get_factory_tiles_from_center(x=factory.pos[0], y=factory.pos[1]))]
-                free_power = (closest_factory[0][1].power - (power_assignments * 150)) > 500 
-                #print(free_power, closest_factory[0][0], closest_factory[0][1].pos, closest_factory[0][1].power)
 
                 charge_state = game_state.is_day() and unit.power < 150 and not on_factory and (not factory_power_formula or (game_state.real_env_steps >= 600 and water_formula))
                 power_treshold_light = 30
@@ -789,7 +861,7 @@ class Archimedes_Lever():
                     unit=unit,
                     on_factory=on_factory, 
                     on_ice_assistance=on_ice_assistance, 
-                    home_factory=self.home_factory[unit_id], 
+                    home_factory=self.home_factory[unit_id][0], 
                     booked_coords=move_bookings, 
                     overwatch_priority=overwatch_priority,
                     game_state=game_state, 
@@ -802,6 +874,8 @@ class Archimedes_Lever():
                     #print(game_state.real_env_steps, unit_id, unit.pos, 'moving to', coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=overwatch_check), 'overwatch triggered')
                     continue
         
+
+
 
                 ### On ice assistance duty
                 # Light bot should move onto home factory tile if not on a factory tile.

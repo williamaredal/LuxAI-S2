@@ -627,16 +627,6 @@ class Archimedes_Lever():
 
 
         for unit_id, unit in units.items():
-            # info about closest map tiles
-            closest_factory_tile = sorted(factory_tiles, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )[0]
-            closest_hostile_factory_tile = sorted(hostile_factory_tiles, key=lambda p: abs(p[0] - unit.pos[0]) + abs(p[1] - unit.pos[1]) )[0]
-            closest_ice_tile = sorted(ice_tile_locations, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )[0]
-            
-            cargo_limit_ice = 960
-            on_factory = all(unit.pos == closest_factory_tile)
-            ajacent_factory = 1 >= (abs(unit.pos[0] - closest_factory_tile[0]) + abs(unit.pos[1] - closest_factory_tile[1]))
-            ajacent_hostile_factory = 1 >= (abs(unit.pos[0] - closest_hostile_factory_tile[0]) + abs(unit.pos[1] - closest_hostile_factory_tile[1]))
-            
             # sets factory that built unit as home factory
             if unit_id not in self.home_factory:
                 self.home_factory[unit_id] = get_closest_factory_tile(
@@ -644,6 +634,18 @@ class Archimedes_Lever():
                     unit_y=unit.pos[1],
                     factories=factories
                 )
+
+            # info about closest map tiles
+            closest_factory_tile = sorted(factory_tiles, key=lambda p: (p[0] - unit.pos[0])**2 + (p[1] - unit.pos[1])**2 )[0]
+            closest_hostile_factory_tile = sorted(hostile_factory_tiles, key=lambda p: abs(p[0] - unit.pos[0]) + abs(p[1] - unit.pos[1]) )[0]
+            closest_ice_tile = sorted(ice_tile_locations, key=lambda p: (p[0] - self.home_factory[unit_id][0][0])**2 + (p[1] - self.home_factory[unit_id][0][1])**2 )[0]
+            
+            cargo_limit_ice = 960
+            on_factory = all(unit.pos == closest_factory_tile)
+            ajacent_factory = 1 >= (abs(unit.pos[0] - closest_factory_tile[0]) + abs(unit.pos[1] - closest_factory_tile[1]))
+            ajacent_hostile_factory = 1 >= (abs(unit.pos[0] - closest_hostile_factory_tile[0]) + abs(unit.pos[1] - closest_hostile_factory_tile[1]))
+            
+            
 
             # relevant info for light and heavy bots
             home_factory_tile = self.home_factory[unit_id][0]
@@ -681,7 +683,7 @@ class Archimedes_Lever():
                         y=home_factory[0][1].pos[1], 
                         interval_x=2,
                         interval_y=2
-                    )]
+                    ) if game_state.board.ore[tile[0]][tile[1]] != 1]
                 )
                 #print(on_rubble_clearing, home_factory[0][0], home_factory[0][1].pos, home_factory[0][1].power, home_factory[0][1].cargo.water)
                 if on_rubble_clearing:
@@ -694,7 +696,11 @@ class Archimedes_Lever():
                         interval_x=2,
                         interval_y=2
                     )]
-                    closest_factory_rubble_tile = sorted([tile for tile in factory_rubble_tiles if game_state.board.rubble[tile[0]][tile[1]] != 0], key=lambda p: (game_state.board.rubble[p[0]][p[1]]))[0]
+
+                    closest_factory_rubble_tile = sorted([tile for tile in factory_rubble_tiles if 
+                        (game_state.board.rubble[tile[0]][tile[1]] != 0) and 
+                        (game_state.board.ore[tile[0]][tile[1]] != 1)
+                    ], key=lambda p: (game_state.board.rubble[p[0]][p[1]]))[0]
                     #print(unit_id, closest_factory_rubble_tile)
 
 
@@ -717,6 +723,7 @@ class Archimedes_Lever():
                     move_bookings[(unit.pos[0], unit.pos[1])] = dig_priority
                     actions[unit_id] = [unit.dig(repeat=0)]
                     #print(unit_id, "clearing factory rubble")
+                    continue
 
                 # on rubble clearing, not on rubble, not below power limit. Move to factory rubble
                 elif on_rubble_clearing and not on_rubble and not below_power_threshold_heavy:
@@ -724,6 +731,7 @@ class Archimedes_Lever():
                     move_bookings[coord_from_direction(x=unit.pos[0], y=unit.pos[1], direction=direction)] = move_priority
                     actions[unit_id] = [unit.move(direction, repeat=0)]
                     #print(unit_id, "moving to factory rubble")
+                    continue
 
                 ### Collecting ice
                 # on ice, but not over cargo capacity limit. Dig ice
@@ -820,8 +828,6 @@ class Archimedes_Lever():
                     ], 
                     key=lambda coord: (coord[0] - closest_factory_tile[0])**2 + (coord[1] - closest_factory_tile[1])**2
                 )
-
-                
                 lowest_rubble__tile_visible = sorted_rubble_tile_vision[0]
                 
 
