@@ -16,6 +16,8 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 [X]
 * TODO Make bots with ore assignments fetch power from factory with "pickup", as power is not utilized to full extent
 [X]
+* TODO Switch light bot "charge state" to be turned off if free power
+[X]
 
 ### Placement choice
 * TODO Make the agent place a factory right next to one ice tile
@@ -102,6 +104,9 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 [X]
 * TODO Convert move_bookings to a dictionary, as i think the number of times it is used justifies usage of this as opposed to an array.
 [X]
+* TODO Change light assistance bot power transfer to allow it to have 2 (or 3) power remaining, so it can evade heavy bots, while still being able
+      to give a net positive power transfer to the mining heavy bot
+[X]
 
 ### Misc
 * TODO Update files in repo, or move agent files to new repo. Basically move from beta to season 2.
@@ -116,3 +121,12 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 [X]
 * TODO Look over all sorts for tiles to ensure they look for the closest tiles the right way
 [X]
+
+
+
+
+
+## Uncompleted
+* TODO Make mechanism that only allows assignment of ice assistance to be one per home factory, if it already is assigned, don't assign
+      This requires some "reset" mechanism if the light bot dies
+[]
