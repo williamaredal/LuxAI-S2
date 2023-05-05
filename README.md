@@ -69,6 +69,8 @@ TODO Make sure coords round factory tiles (2 layers) are clear of rubble
 * TODO Add behaviour to heavy bot that checks its home factory water, and directly surrounding rubble tiles. If the home factory has a certain
       level of water, while there are neighbouring tiles with rubble, send the bot to clear this instead of mining ice.
 [X]
+* TODO Fix bug where heavy does not return to ice tile after successfully clearing rubble around factory
+[X]
 
 ### Light behaviour
 * TODO Incorporate a sorting function for rubble tiles as well as proximity to the light bot (changed to factory tile with closest proximity to unit),
